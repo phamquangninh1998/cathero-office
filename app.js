@@ -65,12 +65,12 @@ window.OfficeApp = { start: function (api) {
     const list = team.seats.map((x) => seats[`${team.id}-${x.role}`]);
     return `<section class="zone ${team.shared ? "shared" : ""}" style="--zc:${team.color}" data-zone="${team.id}">
       ${team.appIcon && (api.icons || {})[team.id] ? `<img class="zone-app" src="${(api.icons || {})[team.id]}" alt="${esc(team.project)}">` : ""}
-      <button class="team-btn" data-team="${team.id}" title="Nhắn cả team ${esc(team.name)}">📣<span> Cả team</span></button>
       <header class="zone-sign" data-team="${team.id}">
         ${team.appIcon ? "" : `<span class="zone-icon">${A.ICONS[team.icon] || ""}</span>`}
         <span class="zone-text"><b>${esc(team.name)} · ${esc(team.game)}</b><small>${esc(team.project)}</small></span>
       </header>
       <div class="desks">${list.map(seatButton).join("")}</div>
+      <button class="team-btn" data-team="${team.id}" title="Nhắn cả team ${esc(team.name)}"><span class="tb-ico">📣</span>Nhắn cả team</button>
     </section>`;
   }
 

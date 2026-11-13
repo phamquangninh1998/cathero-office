@@ -605,3 +605,23 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 .gsi-wrap { display: flex; justify-content: center; min-height: 44px; }
 #gsi-btn { width: 300px; max-width: 100%; margin: 0 auto; }
 .linklike { margin-top: 14px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* big team button (2026-11-14): full-width bar under the desks */
+.team-btn {
+  position: static; display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; margin-top: 8px; padding: clamp(8px, calc(var(--seat) * .08), 14px) 12px;
+  border-radius: 16px; background: #fff; color: var(--ink);
+  font-size: clamp(15px, calc(var(--seat) * .16), 21px); font-weight: 800; line-height: 1.1;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--zc) 70%, #000 8%), 0 6px 14px rgba(0,0,0,.06);
+}
+.team-btn .tb-ico { font-size: 1.25em; }
+.team-btn:hover { transform: translateY(-2px); background: color-mix(in srgb, var(--zc) 12%, #fff); }
+.team-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 color-mix(in srgb, var(--zc) 70%, #000 8%); }
+:root { --seat: clamp(70px, min(5.5vw, 11.2vh), 200px); }
+@media (max-width: 1200px) { :root { --seat: clamp(80px, min(12vw, 15vh), 140px); } }
+@media (max-width: 640px) {
+  :root { --seat: min(29vw, 118px); }
+  .team-btn { font-size: 17px; padding: 12px; margin-top: 6px; }
+  .team-btn span { display: inline; }
+}
+.zone.shared .team-btn { max-width: 460px; margin-left: auto; margin-right: auto; }
