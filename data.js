@@ -163,7 +163,7 @@ window.OFFICE_DATA = {
       seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
     },
     {
-      id: "island", appIcon: true, name: "Cat Hero Island", game: "Ý tưởng mới", project: "Cat Hero Island",
+      id: "island", appIcon: true, name: "Cat Hero Island", game: "", project: "",
       color: "#38d9a9", icon: "island",
       seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
     },

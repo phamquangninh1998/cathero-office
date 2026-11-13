@@ -74,7 +74,7 @@ window.OfficeApp = { start: function (api) {
       ${team.appIcon && (api.icons || {})[team.id] ? `<img class="zone-app" src="${(api.icons || {})[team.id]}" alt="${esc(team.project)}">` : ""}
       <header class="zone-sign" data-team="${team.id}">
         ${team.appIcon && (api.icons || {})[team.id] ? "" : `<span class="zone-icon">${A.ICONS[team.icon] || ""}</span>`}
-        <span class="zone-text"><b>${esc(team.name)} · ${esc(team.game)}</b><small>${esc(team.project)}</small></span>
+        <span class="zone-text"><b>${esc(team.game ? `${team.name} · ${team.game}` : team.name)}</b>${team.project ? `<small>${esc(team.project)}</small>` : ""}</span>
       </header>
       <div class="desks">${list.map(seatButton).join("")}</div>
       <button class="team-btn" data-team="${team.id}" title="Nhắn cả team ${esc(team.name)}"><span class="tb-ico">📣</span>Nhắn cả team</button>
@@ -215,7 +215,7 @@ window.OfficeApp = { start: function (api) {
       : img(s.id, () => A.seatSVG({ look: s.look, prop: s.role.prop, hired: true }));
     $("#p-title").textContent = isBoss ? `${D.boss.name} · ${D.boss.title}` : s.title;
     $("#p-sub").textContent = isBoss ? "Gửi vào project chat (điều phối) trên claude.ai"
-      : `${s.team.name} · ${s.team.game}${s.team.shared ? "" : " · " + s.team.project}`;
+      : [s.team.name, s.team.game, s.team.shared ? "" : s.team.project].filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(" · ");
     $("#p-desc").textContent = isBoss
       ? "Lệnh đi vào project chat, nơi điều phối chia việc cho đúng thread. Trả lời xem trong project chat (nút Mở project chat)."
       : s.role.desc;
