@@ -418,13 +418,14 @@ window.OfficeApp = { start: function (api) {
     waiting: ["Chờ thư mục rảnh", "wait"],
     running: ["Đang làm", "run"],
     sending: ["Đang gửi vào claude.ai", "run"],
-    sent: ["Đã gửi vào thread", "ok"],
+    sent: ["Đã gửi, chờ trả lời", "wait"],
+    replying: ["Đang làm trong thread", "run"],
     done: ["Xong", "ok"],
     needs_confirm: ["Cần bạn xác nhận", "ask"],
     error: ["Lỗi", "err"],
     cancelled: ["Đã huỷ", "off"]
   };
-  const ACTIVE = ["queued", "waiting", "running", "sending"];
+  const ACTIVE = ["queued", "waiting", "running", "sending", "sent", "replying"];
 
   function canRunJob(cur) { return true; }
 
@@ -609,7 +610,7 @@ window.OfficeApp = { start: function (api) {
         : `<p class="j-note">Đang khởi động…</p>`;
     }
     if (j.report) body += `<div class="j-report">${md(j.report)}</div>`;
-    if (j.status === "sent" && j.targetUrl) body += `<a class="btn small ghost" href="${esc(j.targetUrl)}" target="_blank" rel="noopener">Xem trả lời trong thread ↗</a>`;
+    if (j.targetUrl) body += `<a class="btn small ghost j-open" href="${esc(j.targetUrl)}" target="_blank" rel="noopener">Mở thread ↗</a>`;
     if (j.status === "error" && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
     const when = j.finishedAt ? `${ago(tsMs(j.finishedAt))} · ${dur(j.startedAt || j.createdAt, j.finishedAt)}`
       : j.startedAt ? `bắt đầu ${ago(tsMs(j.startedAt))}` : ago(tsMs(j.createdAt));
@@ -621,7 +622,7 @@ window.OfficeApp = { start: function (api) {
           <time>${esc(when)}</time>
         </summary>
         <div class="j-body">${body}
-          ${active ? `<button class="btn small ghost j-cancel" data-job="${j.id}">Huỷ việc này</button>` : ""}
+          ${active ? `<button class="btn small ghost j-cancel" data-job="${j.id}">${["sent", "replying"].includes(j.status) ? "Ngừng theo dõi" : "Huỷ"}</button>` : ""}
         </div>
       </details>
     </li>`;
