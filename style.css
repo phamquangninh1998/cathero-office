@@ -712,3 +712,23 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 @media (max-width: 640px) { .idea-desk .seat { width: 120px; } }
 .ts-sub { display: block; margin-top: 8px; font-size: 12.5px; font-weight: 800; color: #5c5468; }
 .p-tstate:has(.ts-label.run) { background: #eef2ff; border: 1.5px solid #bac8ff; }
+
+/* panel cleanup (2026-11-14): no suggestions, no open-thread/project buttons, larger text */
+#p-chips, #p-open, .j-open, .reply-box { display: none !important; }
+.panel { font-size: 16.5px; }
+.panel .p-titles h2 { font-size: 24px; }
+.panel .p-titles p, .panel .p-desc { font-size: 15.5px; }
+.panel textarea { font-size: 18px; line-height: 1.45; }
+.panel .btn.big { font-size: 18px; padding: 12px 24px; }
+.panel .p-note { font-size: 14px; }
+.panel .j-cmd { font-size: 15.5px; }
+.panel .j-chip { font-size: 12.5px; }
+.panel .j-body, .panel .j-report, .panel .p-tstate { font-size: 15.5px; }
+.panel .job summary time { font-size: 13px; }
+/* the office stays usable beside the panel: no dark overlay on desktop */
+@media (min-width: 641px) { body.panel-open .scrim { opacity: 0 !important; pointer-events: none !important; } }
+/* phone: shorter sheet, office scrolls above it */
+@media (max-width: 640px) {
+  .panel { max-height: 64vh; max-height: 64dvh; }
+  body.panel-open .office { padding-bottom: 66vh; }
+}

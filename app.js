@@ -196,6 +196,7 @@ window.OfficeApp = { start: function (api) {
     renderThreadState();
     markSeen(cur);
     document.body.classList.add("panel-open");
+    fitOffice();
     panel.setAttribute("aria-hidden", "false");
     setTimeout(() => $("#p-cmd").focus(), 220);
   }
@@ -255,6 +256,7 @@ window.OfficeApp = { start: function (api) {
     renderThreadState();
     markSeen(cur);
     document.body.classList.add("panel-open");
+    fitOffice();
     panel.setAttribute("aria-hidden", "false");
     setTimeout(() => $("#p-cmd").focus(), 220);
   }
@@ -265,12 +267,33 @@ window.OfficeApp = { start: function (api) {
     const ts = current && current.kind === "seat" ? threadStates[current.seat.id] : null;
     box.hidden = !ts;
     if (ts) box.innerHTML = `<b>Trên claude.ai:</b> <span class="ts-label ${ts.kind}">${esc(ts.label)}</span> ${esc(ts.summary || "")}${ts.ago ? ` <time>${esc(ts.ago)}</time>` : ""}`
-      + (ts.detail ? `<span class="ts-sub">${ts.kind === "run" ? "Đang làm gì (tin mới nhất trong thread):" : ts.kind === "ask" ? "Nhân viên đang hỏi:" : "Tin mới nhất:"}</span><div class="ts-detail j-report">${md(ts.detail)}</div>${ts.kind === "ask" ? `<span class="ts-hint">Trả lời bằng ô Lệnh bên dưới, tin sẽ vào thẳng thread này.</span>` : ""}` : "");
+      + (ts.detail && ts.kind === "ask" ? `<span class="ts-sub">${ts.kind === "run" ? "Đang làm gì (tin mới nhất trong thread):" : ts.kind === "ask" ? "Nhân viên đang hỏi:" : "Tin mới nhất:"}</span><div class="ts-detail j-report">${md(ts.detail)}</div>${ts.kind === "ask" ? `<span class="ts-hint">Trả lời bằng ô Lệnh bên dưới, tin sẽ vào thẳng thread này.</span>` : ""}` : "");
   }
+
+  // Shrink the office so it fits next to the open panel (desktop) or above the sheet (phone).
+  function fitOffice() {
+    const open = document.body.classList.contains("panel-open");
+    const office = document.querySelector(".office"), top = document.querySelector(".topbar");
+    if (!office) return;
+    let z = "";
+    if (open && innerWidth > 640) {
+      const pw = $("#panel").getBoundingClientRect().width + 24;
+      z = String(Math.max(0.45, Math.min(1, (innerWidth - pw) / innerWidth)));
+    }
+    // Lay the office out at full width, then scale it so it fills the space left of the panel.
+    for (const el of [office, top]) {
+      if (!el) continue;
+      el.style.zoom = z;
+      el.style.width = z ? innerWidth + "px" : "";
+      el.style.maxWidth = z ? "none" : "";
+    }
+  }
+  addEventListener("resize", () => { if (document.body.classList.contains("panel-open")) fitOffice(); });
 
   function closePanel() {
     document.body.classList.remove("panel-open");
     $("#panel").setAttribute("aria-hidden", "true");
+    fitOffice();
     current = null;
   }
 
@@ -656,13 +679,6 @@ window.OfficeApp = { start: function (api) {
         <span class="who">${m.who === "you" ? "Bạn" : m.who === "coordinator" ? "Điều phối" : esc((j.delegatedTo || j.title || "Nhân viên").split(" · ")[0])}</span>
         <div class="j-report">${md(m.text)}</div></li>`).join("")}</ol>`;
     } else if (j.report) body += `<div class="j-report">${md(j.report)}</div>`;
-    const replyUrl = j.followUrl || (j.seatId !== "boss" ? j.targetUrl : (j.delegatedTo ? null : j.targetUrl));
-    if (replyUrl && ["sent", "replying", "needs_you", "done", "delegated"].includes(j.status)) {
-      body += `<div class="reply-box"><textarea rows="2" placeholder="Trả lời ${esc(j.delegatedTo || j.title || "")}…" data-reply-for="${j.id}"></textarea>
-        <button class="btn primary small" data-reply-send="${j.id}">Gửi trả lời</button></div>`;
-    }
-    const openUrl = j.followUrl || j.targetUrl;
-    if (openUrl) body += `<a class="btn small ghost j-open" href="${esc(openUrl)}" target="_blank" rel="noopener">Mở thread ↗</a>`;
     if ((j.status === "error" || j.status === "send_failed") && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
     const when = j.finishedAt ? `${ago(tsMs(j.finishedAt))} · ${dur(j.startedAt || j.createdAt, j.finishedAt)}`
       : j.startedAt ? `bắt đầu ${ago(tsMs(j.startedAt))}` : ago(tsMs(j.createdAt));
@@ -769,6 +785,7 @@ window.OfficeApp = { start: function (api) {
     const badge = $("#p-badge"); badge.textContent = "Toàn studio"; badge.className = "pill gold";
     renderLog();
     document.body.classList.add("panel-open");
+    fitOffice();
     panel.setAttribute("aria-hidden", "false");
   }
 
