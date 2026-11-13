@@ -26,7 +26,7 @@ function isAllowed(user) {
 async function startOffice(user) {
   const rosterRef = doc(db, "office", "roster");
   const historyRef = doc(db, "office", "history");
-  const [roster, history] = await Promise.all([getDoc(rosterRef), getDoc(historyRef)]);
+  const [roster, history, icons] = await Promise.all([getDoc(rosterRef), getDoc(historyRef), getDoc(doc(db, "office", "icons"))]);
   const api = {
     // seedJson (a JSON string set once in the console) is the starting roster;
     // `threads` holds later edits, where "" means the desk was emptied.
@@ -35,6 +35,7 @@ async function startOffice(user) {
       ...((roster.exists() && roster.data().threads) || {})
     }).filter(([, v]) => v)),
     history: (history.exists() && history.data().seats) || {},
+    icons: icons.exists() ? icons.data() : {},
     saveThread: (seatId, threadId) =>
       setDoc(rosterRef, { threads: { [seatId]: threadId || "" } }, { merge: true }),
     saveHistory: (key, list) =>
@@ -69,7 +70,7 @@ if (DEMO) {
   const now = Date.now();
   window.OfficeApp.start({
     threads: { "b1-developer": "demo", "b2-developer": "demo", "b3-developer": "demo", "b4-developer": "demo", "chung-marketing": "demo", "chung-data": "demo" },
-    history: {}, saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
+    history: {}, icons: Object.fromEntries(["b1", "b2", "b3", "b4", "sports", "moe", "paperroll"].map((k) => [k, `icons/${k}.png`])), saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
     watchJobs: (cb) => cb([
       { id: "d1", seatId: "b2-developer", status: "running", command: "Kiểm tra lỗi màn 12", createdAt: T(now - 60000), startedAt: T(now - 50000), progress: [{ text: "Đọc: Assets/Scripts/Wave.cs" }] },
       { id: "d2", seatId: "chung-data", status: "done", command: "Thử hệ thống", createdAt: T(now - 900000), startedAt: T(now - 880000), finishedAt: T(now - 60000), report: "Mình đã đọc xong cả 4 thư mục.\n\n| Game | Nhánh |\n|---|---|\n| Spacecraft | `main` |\n| Invaders | `art/blender-models` |" }

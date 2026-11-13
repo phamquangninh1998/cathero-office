@@ -27,9 +27,12 @@ const TEAMS = {
   b2: { name: "Bản 2 · Bắn phá", game: "Cat Hero Invaders Universe", folder: path.join(ROOT, "CatHeroInvadersUniverse") },
   b3: { name: "Bản 3 · Thả lính", game: "Cat Hero Animal Soldiers", folder: path.join(ROOT, "CatHeroAnimalSoldiers") },
   b4: { name: "Bản 4 · Solo", game: "Cat Hero Solo Play", folder: path.join(ROOT, "CatHeroSoloPlay") },
-  chung: { name: "Chung", game: "cả 4 bản", folder: null }
+  sports: { name: "100 Sports", game: "100 Sports", folder: path.join(ROOT, "100Sports") },
+  moe: { name: "Moe Family", game: "Moe Family Only Up", folder: path.join(HOME, "Documents", "GitHub", "MoeFamily") },
+  paperroll: { name: "Paper Roll", game: "Paper Roll: Lazy Cat", folder: path.join(ROOT, "Paper-roll-Lazy-Cat") },
+  chung: { name: "Chung", game: "cả 7 game", folder: null }
 };
-const FORBIDDEN = path.join(ROOT, "Paper-roll-Lazy-Cat");
+const GAME_FOLDERS = Object.values(TEAMS).map((t) => t.folder).filter(Boolean);
 
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 
@@ -72,13 +75,12 @@ async function folderBusy(folder) {
 function rolePrompt(job, team) {
   const threadLink = job.thread ? `${PROJECT_URL}?thread=${job.thread}` : PROJECT_URL;
   const where = team.folder
-    ? `Your game folder is ${team.folder}. Work only inside it. Do not edit any other game folder under ${ROOT}.`
-    : `You are a shared role for all four games (folders CatHeroSpacecraft, CatHeroInvadersUniverse, CatHeroAnimalSoldiers, CatHeroSoloPlay under ${ROOT}). You may read them, but do not edit game files; write your own files only in ${path.join(ROOT, "CatHeroOffice", "workspace", job.role)}.`;
+    ? `Your game folder is ${team.folder}. Work only inside it. Do not edit any other game folder (${GAME_FOLDERS.filter((f) => f !== team.folder).join(", ")}) or anything else outside your folder, except notes in your memory.`
+    : `You are a shared role for all seven games (folders ${GAME_FOLDERS.join(", ")}). You may read them, but do not edit game files; write your own files only in ${path.join(ROOT, "CatHeroOffice", "workspace", job.role)}.`;
   return [
-    `You are "${job.title}" (${team.name}, ${team.game}), an employee of Cat Hero Studio working for Phuong.`,
+    `You are "${job.title}" (${team.name}, ${team.game}), a senior ${String(job.title).split(" · ")[0]} at Cat Hero Studio working for Phuong. Work like a senior: understand the codebase and project notes before changing anything, make careful, well-tested changes, keep the game's existing style and rules, and push back with reasons when a request would hurt the game.`,
     `This command was sent from the studio office web page and Phuong is waiting on that page for your report.`,
     where,
-    `Never read, list or modify ${FORBIDDEN}.`,
     `Outward actions are NOT allowed in this run: submitting or changing anything on App Store Connect or Google Play, publishing or pushing to public places, creating or changing ad campaigns or budgets, sending messages (Telegram, email, chat, social), purchases, deleting data or accounts. If the task needs one, do all the safe work first, then stop and begin your final message with "CẦN XÁC NHẬN:" and say exactly which action, its target and why, and ask Phuong to confirm it in the thread ${threadLink}.`,
     `Run at most one Unity batch/editor job at a time; follow the project notes in your memory.`,
     `Your final message is the report shown on the web page: write it in Vietnamese, lead with the result, keep it short (bullets are fine), name files you changed, and say what you could not verify. No em-dashes.`
@@ -107,11 +109,10 @@ async function runJob(ref, job) {
   const resumeId = sessions[job.seatId];
   const sessionId = resumeId || randomUUID();
 
-  const settings = JSON.stringify({
-    permissions: {
-      deny: ["Read", "Edit", "Write"].map((t) => `${t}(/${FORBIDDEN}/**)`)
-    }
-  });
+  // Game teams may only edit their own folder; shared roles may not edit any game.
+  const editDeny = GAME_FOLDERS.filter((f) => f !== team.folder)
+    .flatMap((f) => ["Edit", "Write"].map((t) => `${t}(/${f}/**)`));
+  const settings = JSON.stringify({ permissions: { deny: editDeny } });
   const args = [
     "-p", job.command,
     "--output-format", "stream-json", "--verbose",
@@ -120,12 +121,14 @@ async function runJob(ref, job) {
     "--append-system-prompt", rolePrompt(job, team),
     "--settings", settings
   ];
+  // Folders outside ~/UnityProjects (Moe Family) must be added explicitly.
+  for (const f of team.folder ? [team.folder] : GAME_FOLDERS) if (!f.startsWith(ROOT + path.sep)) args.push("--add-dir", f);
   if (resumeId) args.push("--resume", resumeId); else args.push("--session-id", sessionId);
 
   log("run", ref.id, job.title, short(job.command, 80), resumeId ? `(resume ${resumeId})` : "");
   await ref.update({ status: "running", startedAt: FieldValue.serverTimestamp(), note: FieldValue.delete(), sessionId, progress: [] });
 
-  const child = spawn(CLAUDE, args, { cwd: ROOT, env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}` } });
+  const child = spawn(CLAUDE, args, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}` } });
   running.set(ref.id, { child, lock });
 
   let progress = [];

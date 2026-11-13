@@ -1,6 +1,7 @@
 // Office roster. Edit this file to hire people or move desks.
 // Which seats hold an employee (a Claude thread) is NOT in this public file:
 // thread ids live in Firestore (office/roster), readable only by the owner account.
+// App icons (appIcon: true) also come from Firestore (office/icons), not this public repo.
 window.OFFICE_DATA = {
   studio: "Cat Hero Studio",
   projectUrl: "https://claude.ai/code/project/chan_01KHZZY2Zsyqn7jE4CfbzvCK",
@@ -101,7 +102,7 @@ window.OFFICE_DATA = {
 
   teams: [
     {
-      id: "b1", name: "Bản 1", game: "Dọn dẹp", project: "Cat Hero Spacecraft",
+      id: "b1", appIcon: true, name: "Bản 1", game: "Dọn dẹp", project: "Cat Hero Spacecraft",
       color: "#6ec6ff", icon: "broom",
       seats: [
         { role: "developer" },
@@ -110,7 +111,7 @@ window.OFFICE_DATA = {
       ]
     },
     {
-      id: "b2", name: "Bản 2", game: "Bắn phá", project: "Cat Hero Invaders",
+      id: "b2", appIcon: true, name: "Bản 2", game: "Bắn phá", project: "Cat Hero Invaders",
       color: "#ff8a80", icon: "blaster",
       seats: [
         { role: "developer" },
@@ -119,7 +120,7 @@ window.OFFICE_DATA = {
       ]
     },
     {
-      id: "b3", name: "Bản 3", game: "Thả lính", project: "Cat Hero Animal Soldiers",
+      id: "b3", appIcon: true, name: "Bản 3", game: "Thả lính", project: "Cat Hero Animal Soldiers",
       color: "#9be38f", icon: "parachute",
       seats: [
         { role: "developer" },
@@ -128,7 +129,7 @@ window.OFFICE_DATA = {
       ]
     },
     {
-      id: "b4", name: "Bản 4", game: "Solo", project: "Cat Hero Solo Play",
+      id: "b4", appIcon: true, name: "Bản 4", game: "Solo", project: "Cat Hero Solo Play",
       color: "#ffd166", icon: "star",
       seats: [
         { role: "developer" },
@@ -137,7 +138,22 @@ window.OFFICE_DATA = {
       ]
     },
     {
-      id: "chung", name: "Chung", game: "Dùng chung", project: "Cả 4 bản",
+      id: "sports", appIcon: true, name: "100 Sports", game: "Chạy thể thao", project: "100 Sports",
+      color: "#74c0fc", icon: "star",
+      seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
+    },
+    {
+      id: "moe", appIcon: true, name: "Moe Family", game: "Only Up", project: "Moe Family Only Up",
+      color: "#ffa8a8", icon: "star",
+      seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
+    },
+    {
+      id: "paperroll", appIcon: true, name: "Paper Roll", game: "Lazy Cat", project: "Paper Roll: Lazy Cat",
+      color: "#63e6be", icon: "star",
+      seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
+    },
+    {
+      id: "chung", name: "Chung", game: "Dùng chung", project: "Cả 7 game",
       color: "#c3a6ff", icon: "globe", shared: true,
       seats: [
         { role: "marketing" },

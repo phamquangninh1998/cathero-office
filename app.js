@@ -50,13 +50,13 @@ window.OfficeApp = { start: function (api) {
 
   // ---------- render ----------
   function seatButton(s) {
-    const hired = !!s.thread;
-    return `<button class="seat ${hired ? "hired" : "hiring"}" data-seat="${s.id}" aria-label="${esc(s.title)}${hired ? "" : " (đang tuyển)"}">
+    const hired = true;
+    return `<button class="seat hired" data-seat="${s.id}" aria-label="${esc(s.title)}">
       <span class="bubble" data-bubble="${s.id}" hidden></span>
       <div class="seat-art">${A.seatSVG({ look: s.look, prop: s.role.prop, hired })}</div>
       <div class="seat-label">
         <span class="role">${esc(s.role.label)}</span>
-        <span class="pill ${hired ? "on" : "off"}">${hired ? "Có thread" : "Đang tuyển"}</span>
+        <span class="pill on">Senior${s.thread ? ' <i class="tlink" title="Có thread claude.ai">●</i>' : ""}</span>
       </div>
     </button>`;
   }
@@ -64,8 +64,9 @@ window.OfficeApp = { start: function (api) {
   function zone(team) {
     const list = team.seats.map((x) => seats[`${team.id}-${x.role}`]);
     return `<section class="zone ${team.shared ? "shared" : ""}" style="--zc:${team.color}" data-zone="${team.id}">
+      ${team.appIcon && (api.icons || {})[team.id] ? `<img class="zone-app" src="${(api.icons || {})[team.id]}" alt="${esc(team.project)}">` : ""}
       <header class="zone-sign">
-        <span class="zone-icon">${A.ICONS[team.icon] || ""}</span>
+        ${team.appIcon ? "" : `<span class="zone-icon">${A.ICONS[team.icon] || ""}</span>`}
         <span class="zone-text"><b>${esc(team.name)} · ${esc(team.game)}</b><small>${esc(team.project)}</small></span>
       </header>
       <div class="desks">${list.map(seatButton).join("")}</div>
@@ -87,6 +88,19 @@ window.OfficeApp = { start: function (api) {
     </section>`;
   }
 
+  // Coffee corner that fills the empty grid cell next to Paper Roll.
+  function lounge() {
+    return `<section class="lounge" aria-hidden="true">
+      <div class="lounge-sign">☕ Góc cà phê</div>
+      <div class="lounge-art">
+        <div class="sofa"></div>
+        <div class="cat-nap">${A.catSVG()}</div>
+        <div class="coffee"><i></i></div>
+        <div class="plant lounge-plant">${A.plantSVG(1)}</div>
+      </div>
+    </section>`;
+  }
+
   function render() {
     const byId = Object.fromEntries(D.teams.map((t) => [t.id, t]));
     const floor = $("#floor");
@@ -96,12 +110,15 @@ window.OfficeApp = { start: function (api) {
        <div class="area a-boss">${bossArea()}</div>
        <div class="area a-b3">${zone(byId.b3)}</div>
        <div class="area a-b4">${zone(byId.b4)}</div>
+       <div class="area a-sports">${zone(byId.sports)}</div>
+       <div class="area a-moe">${zone(byId.moe)}</div>
+       <div class="area a-paperroll">${zone(byId.paperroll)}</div>
+       <div class="area a-lounge">${lounge()}</div>
        <div class="area a-chung">${zone(byId.chung)}</div>`;
 
     const all = Object.values(seats);
-    const hired = all.filter((s) => s.thread).length;
-    $("#stat-staff").textContent = hired;
-    $("#stat-open").textContent = all.length - hired;
+    $("#stat-staff").textContent = all.length;
+    $("#stat-open").textContent = D.teams.length;
     $("#brand-name").textContent = D.studio;
     renderBubbles();
   }
@@ -112,7 +129,7 @@ window.OfficeApp = { start: function (api) {
   function targetFor(cur) {
     if (cur.kind === "boss") return { url: D.projectUrl, label: "project chat (điều phối)" };
     if (cur.seat.thread) return { url: threadUrl(cur.seat.thread), label: `thread “${cur.seat.title}”` };
-    return { url: D.projectUrl, label: "project chat (điều phối) để tuyển" };
+    return { url: D.projectUrl, label: "project chat (điều phối)" };
   }
 
   function templatesFor(cur) {
@@ -124,12 +141,6 @@ window.OfficeApp = { start: function (api) {
       ];
     }
     const s = cur.seat;
-    if (!s.thread) {
-      return [
-        `Tuyển nhân viên mới: tạo thread “${s.role.label} · ${s.team.name}” (${s.team.game}${s.team.shared ? "" : ", " + s.team.project}). Việc đầu tiên: `,
-        `Tuyển “${s.role.label} · ${s.team.name}” và giao việc: ${s.role.desc.toLowerCase()}`
-      ];
-    }
     return D.common.concat(s.role.templates);
   }
 
@@ -138,7 +149,7 @@ window.OfficeApp = { start: function (api) {
     const panel = $("#panel");
     const isBoss = cur.kind === "boss";
     const s = cur.seat;
-    const hired = isBoss || !!s.thread;
+    const hired = true;
 
     $("#p-avatar").innerHTML = isBoss
       ? A.seatSVG({ look: D.boss.look, hired: true, boss: true, label: D.boss.title })
@@ -151,13 +162,14 @@ window.OfficeApp = { start: function (api) {
       : s.role.desc;
 
     const badge = $("#p-badge");
-    badge.textContent = isBoss ? "Giám đốc" : (hired ? "Có thread" : "Đang tuyển");
-    badge.className = "pill " + (isBoss ? "gold" : hired ? "on" : "off");
+    badge.textContent = isBoss ? "Giám đốc" : "Senior · Opus 5.5";
+    badge.className = "pill " + (isBoss ? "gold" : "on");
 
     const target = targetFor(cur);
     const open = $("#p-open");
     open.href = target.url;
-    open.textContent = isBoss ? "Mở project chat ↗" : hired ? "Mở thread ↗" : "Mở project chat ↗";
+    open.textContent = isBoss ? "Mở project chat ↗" : "Mở thread ↗";
+    open.hidden = !isBoss && !s.thread;
     $("#p-target").textContent = target.label;
     const direct = canRunJob(cur);
     panel.classList.toggle("direct", direct);
@@ -176,7 +188,7 @@ window.OfficeApp = { start: function (api) {
     linkBox.hidden = isBoss;
     if (!isBoss) {
       $("#p-link-input").value = s.thread ? threadUrl(s.thread) : "";
-      $("#p-link-summary").textContent = s.thread ? "Đổi link thread" : "Đã tạo thread? Gắn link vào bàn này";
+      $("#p-link-summary").textContent = s.thread ? "Đổi link thread claude.ai" : "Gắn thread claude.ai (không bắt buộc)";
     }
 
     renderHistory();
@@ -261,7 +273,7 @@ window.OfficeApp = { start: function (api) {
     if (id) overrides[s.id] = id; else delete overrides[s.id];
     s.thread = id || "";
     api.saveThread(s.id, id || null)
-      .then(() => rerenderKeepPanel(s.id, id ? "Đã gắn thread vào bàn này." : "Đã gỡ thread, bàn này chuyển sang đang tuyển."))
+      .then(() => rerenderKeepPanel(s.id, id ? "Đã gắn thread vào bàn này." : "Đã gỡ link thread."))
       .catch((e) => toast("Không lưu được: " + e.message));
   }
 
@@ -355,7 +367,7 @@ window.OfficeApp = { start: function (api) {
   };
   const ACTIVE = ["queued", "waiting", "running"];
 
-  function canRunJob(cur) { return cur.kind === "seat" && !!cur.seat.thread; }
+  function canRunJob(cur) { return cur.kind === "seat"; }
 
   function tsMs(t) { return t ? (t.toMillis ? t.toMillis() : +t) : Date.now(); }
 

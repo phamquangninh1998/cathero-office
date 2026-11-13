@@ -519,3 +519,65 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 }
 .seat-label .role { white-space: nowrap; }
 @media (max-width: 640px) { .zone.shared .seat-label .role { white-space: normal; text-align: center; } }
+
+/* ================= 7 game teams (2026-11-14) ================= */
+:root { --seat: clamp(70px, min(5.5vw, 12.4vh), 200px); }
+.floor {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) calc(var(--seat) * 2.3) repeat(2, minmax(0, 1fr));
+  grid-template-rows: 1fr 1fr auto;
+  grid-template-areas:
+    "b1     b2  boss b3        b4"
+    "sports moe boss paperroll lounge"
+    "chung  chung chung chung  chung";
+}
+.a-sports { grid-area: sports; } .a-moe { grid-area: moe; } .a-paperroll { grid-area: paperroll; } .a-lounge { grid-area: lounge; }
+.zone { padding-left: 8px; padding-right: 8px; }
+.desks { gap: 2px; }
+.zone-sign { max-width: calc(100% - 50px); }
+.zone-text b, .zone-text small { overflow: hidden; text-overflow: ellipsis; }
+
+/* app icon pinned to each team's corner */
+.zone-app {
+  position: absolute; top: -14px; left: -10px; z-index: 3;
+  width: clamp(40px, calc(var(--seat) * .46), 66px); aspect-ratio: 1; border-radius: 26%;
+  border: 3px solid #fff; background: #fff; object-fit: cover;
+  box-shadow: 0 4px 0 color-mix(in srgb, var(--zc) 70%, #000 10%), 0 8px 16px rgba(0,0,0,.14);
+  transform: rotate(-6deg);
+}
+.pill .tlink { font-style: normal; color: #4c6ef5; font-size: 9px; vertical-align: 1px; }
+
+/* coffee corner */
+.lounge {
+  position: relative; flex: 1; border-radius: 26px; border: 3px dashed #d9b98f;
+  background: repeating-linear-gradient(45deg, #f6e3c6 0 14px, #f2dbb9 14px 28px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 10px;
+}
+.lounge-sign { background: #fff; border-radius: 12px; padding: 3px 12px; font-weight: 800; font-size: clamp(13px, calc(var(--seat) * .12), 18px); box-shadow: 0 3px 0 rgba(120,80,40,.15); }
+.lounge-art { position: relative; width: calc(var(--seat) * 2.4); height: calc(var(--seat) * 1.1); }
+.sofa { position: absolute; left: 4%; bottom: 0; width: 66%; height: 62%; border-radius: 22px 22px 12px 12px; background: #e8590c;
+  box-shadow: inset 0 -14px 0 #c84a06, inset 12px 0 0 #f76707, inset -12px 0 0 #f76707; }
+.sofa::before { content: ""; position: absolute; left: 14%; right: 14%; top: 40%; height: 26%; border-radius: 10px; background: #ff922b; }
+.cat-nap { position: absolute; left: 24%; bottom: 30%; width: 30%; }
+.cat-nap svg { width: 100%; display: block; }
+.coffee { position: absolute; right: 18%; bottom: 0; width: 13%; height: 54%; border-radius: 6px 6px 4px 4px; background: #495057; }
+.coffee::before { content: ""; position: absolute; left: 20%; right: 20%; top: 14%; height: 18%; border-radius: 3px; background: #74c0fc; }
+.coffee i { position: absolute; left: 25%; bottom: 10%; width: 50%; height: 22%; border-radius: 0 0 5px 5px; background: #fff; }
+.lounge-plant { position: absolute; right: 0; bottom: 0; width: 15%; }
+
+@media (max-width: 1200px) {
+  :root { --seat: clamp(80px, min(12vw, 16vh), 140px); }
+  .floor {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-template-areas: "boss boss" "b1 b2" "b3 b4" "sports moe" "paperroll lounge" "chung chung";
+  }
+  .boss-area { padding: 8px 0 4px; }
+}
+@media (max-width: 640px) {
+  :root { --seat: min(29vw, 118px); }
+  .floor { grid-template-columns: minmax(0, 1fr); grid-template-areas: "boss" "b1" "b2" "b3" "b4" "sports" "moe" "paperroll" "chung"; }
+  .a-lounge { display: none; }
+  .zone-app { width: 42px; top: -12px; left: -6px; }
+  .zone-sign { max-width: calc(100% - 70px); }
+}
+@media (min-width: 1201px) { .boss-hint { display: none; } }
