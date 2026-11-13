@@ -7,6 +7,8 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
+import { DeliveryBot } from "./deliverybot.js";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 
@@ -219,53 +221,69 @@ async function runJob(ref, job) {
 // ---------- delivering a command into claude.ai through Chrome ----------
 // The page's command is posted, word for word, into the employee's thread (or the
 // project chat for the CEO desk) by a small headless Claude using Claude in Chrome.
-const DELIVER_TEMPLATE = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "deliver-prompt.md"), "utf8");
 const CHROME_DEVICE = process.env.OFFICE_CHROME_DEVICE || "cd9e24d3-e70c-47e6-b029-7cc63d55d04a";
 const DELIVER_MODEL = process.env.OFFICE_DELIVER_MODEL || "claude-sonnet-5-5";
+
+// Seat titles for every desk, read from the page's data.js.
+function officeSeats() {
+  const sandbox = { window: {} };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, "CatHeroOffice", "data.js"), "utf8"), sandbox);
+  const D = sandbox.window.OFFICE_DATA;
+  return D.teams.flatMap((t) => t.seats.map((s) => ({ id: `${t.id}-${s.role}`, title: `${D.roles[s.role].label} · ${t.name}` })));
+}
+
+async function rosterThreads() {
+  const r = ((await db.collection("office").doc("roster").get()).data() || {});
+  return { ...JSON.parse(r.seedJson || "{}"), ...(r.threads || {}) };
+}
+
+async function deliveryTargets() {
+  const threads = await rosterThreads();
+  const list = officeSeats().filter((s) => threads[s.id]).map((s) => ({ label: s.title, url: `${PROJECT_URL}?thread=${threads[s.id]}` }));
+  return [{ label: "Project chat (điều phối)", url: PROJECT_URL }, ...list];
+}
+
+const bot = new DeliveryBot({ claude: CLAUDE, cwd: path.join(ROOT, "CatHeroOffice"), model: DELIVER_MODEL, device: CHROME_DEVICE, log, maxSends: 25 });
+let botStarting = null;
+async function ensureBot() {
+  if (bot.alive && bot.sends < bot.maxSends) return true;
+  if (bot.alive) await bot.stop();
+  if (!botStarting) botStarting = deliveryTargets().then((t) => bot.start(t)).finally(() => { botStarting = null; });
+  return botStarting;
+}
 
 async function runDelivery(ref, job) {
   locks.add("chrome");
   const isBoss = job.seatId === "boss";
   const url = isBoss ? PROJECT_URL : `${PROJECT_URL}?thread=${job.thread}`;
+  const label = isBoss ? "Project chat (điều phối)" : job.title;
   const box = isBoss
     ? `the main project chat box on the left (placeholder like "Ask Claude a question or start a task..."), NOT any thread panel on the right`
     : `the reply box of the thread panel on the right side (placeholder like "Steer this thread..."), in the thread titled "${job.title}". NOT the main project chat box on the left`;
-  const prompt = DELIVER_TEMPLATE.replaceAll("{{DEVICE}}", CHROME_DEVICE).replaceAll("{{URL}}", url)
-    .replaceAll("{{BOX}}", box).replaceAll("{{MESSAGE}}", job.command);
-  log("deliver", ref.id, job.title, short(job.command, 80));
+  log("deliver", ref.id, label, short(job.command, 80));
   await ref.update({ status: "sending", startedAt: FieldValue.serverTimestamp(), note: FieldValue.delete(), progress: [], targetUrl: url });
-  const args = ["-p", prompt, "--chrome", "--strict-mcp-config", "--model", DELIVER_MODEL,
-    "--permission-mode", "auto", "--permission-prompts", "none", "--output-format", "stream-json", "--verbose", "--no-session-persistence"];
-  const child = spawn(CLAUDE, args, { cwd: path.join(ROOT, "CatHeroOffice"), stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}` } });
-  running.set(ref.id, { child, lock: "chrome" });
-  let result = null, buf = "", stderr = "", progress = [], dirty = false;
+  running.set(ref.id, { child: { kill: () => {} }, lock: "chrome" });
+  let progress = [], dirty = false, result;
   const flush = setInterval(() => { if (dirty) { dirty = false; ref.update({ progress }).catch(() => {}); } }, 2500);
-  const killer = setTimeout(() => child.kill("SIGTERM"), 6 * 60 * 1000);
-  child.stdout.on("data", (chunk) => {
-    buf += chunk;
-    let nl;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
-      if (!line) continue;
-      let ev; try { ev = JSON.parse(line); } catch { continue; }
-      if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
-        for (const b of ev.message.content) if (b.type === "tool_use" && /navigate|computer|form_input|tabs_create/.test(b.name)) {
-          const step = /navigate/.test(b.name) ? "Mở thread trong Chrome" : /tabs_create/.test(b.name) ? "Mở tab mới" : /form_input/.test(b.name) ? "Điền lệnh" : `Thao tác: ${(b.input && b.input.action_summary) || (b.input && b.input.action) || ""}`;
-          progress.push({ t: Date.now(), text: short(step, 120) }); progress = progress.slice(-20); dirty = true;
-        }
-      } else if (ev.type === "result") result = ev;
-    }
-  });
-  child.stderr.on("data", (d) => { stderr = (stderr + d).slice(-3000); });
-  const code = await new Promise((resolve) => child.on("close", resolve));
-  clearInterval(flush); clearTimeout(killer);
+  try {
+    if (!(await ensureBot())) throw new Error("Không mở được Chrome / claude.ai trên Mac mini");
+    result = await bot.deliver({ label, url, box, message: job.command }, (b) => {
+      if (!/navigate|computer|form_input|tabs_create/.test(b.name)) return;
+      const step = /navigate/.test(b.name) ? "Mở lại thread trong Chrome" : /tabs_create/.test(b.name) ? "Mở tab mới" : /form_input/.test(b.name) ? "Điền lệnh"
+        : `Thao tác: ${(b.input && (b.input.action_summary || b.input.action)) || ""}`;
+      progress.push({ t: Date.now(), text: short(step, 120) }); progress = progress.slice(-20); dirty = true;
+    });
+  } catch (e) {
+    result = { result: `FAILED: ${e.message}` };
+  }
+  clearInterval(flush);
   running.delete(ref.id); locks.delete("chrome");
   const text = String((result && result.result) || "").trim();
   const ok = /^DELIVERED\b/.test(text);
   await ref.update({
     status: ok ? "sent" : "error", progress, finishedAt: FieldValue.serverTimestamp(),
     report: ok ? (isBoss ? "Đã gửi vào project chat trên claude.ai." : "Đã gửi vào thread trên claude.ai. Xem trả lời trong thread.") : "",
-    ...(ok ? {} : { error: short(text.replace(/^FAILED:\s*/, "") || stderr || `exit ${code}`, 600) }),
+    ...(ok ? {} : { error: short(text.replace(/^FAILED:\s*/, "") || "không rõ lỗi", 600) }),
     ...(result && typeof result.total_cost_usd === "number" ? { costUsd: result.total_cost_usd } : {})
   });
   log("delivered", ref.id, ok ? "ok" : "failed", short(text, 120));
@@ -397,8 +415,11 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
   process.on(sig, async () => {
     log("stopping, jobs running:", running.size);
     for (const { child } of running.values()) child.kill("SIGTERM");
+    await bot.stop(true).catch(() => {});
     await workerDoc.set({ lastSeen: Timestamp.fromMillis(0) }, { merge: true }).catch(() => {});
     process.exit(0);
   });
 }
 log("worker started; model", MODEL, "effort", EFFORT);
+// Open the claude.ai tabs right away so the first send is quick.
+if (process.env.OFFICE_WARM_TABS !== "0") ensureBot().catch((e) => log("delivery bot start failed", e.message));
