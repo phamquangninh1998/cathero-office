@@ -420,3 +420,8 @@ body[data-auth="denied"] .gate-denied { display: block; }
 .j-report code { background: #f1ece2; border-radius: 5px; padding: 0 4px; font-size: 12.5px; }
 .j-report a { color: #1971c2; }
 #p-send:disabled { opacity: .6; cursor: wait; }
+
+.j-table { overflow-x: auto; margin: 4px 0 8px; }
+.j-table table { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+.j-table th, .j-table td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #eadfce; white-space: nowrap; }
+.j-table th { font-weight: 800; color: #5c5468; }

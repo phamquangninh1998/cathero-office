@@ -431,7 +431,19 @@ window.OfficeApp = { start: function (api) {
       .replace(/`([^`]+)`/g, "<code>$1</code>")
       .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
       .replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    let table = null;
+    const endTable = () => { if (table) { html += `<div class="j-table"><table>${table.join("")}</table></div>`; table = null; } };
     for (const raw of lines) {
+      if (/^\s*\|.*\|\s*$/.test(raw)) {
+        if (inList) { html += "</ul>"; inList = false; }
+        if (/^\s*\|[\s:|-]+\|\s*$/.test(raw)) continue;
+        const cells = raw.trim().slice(1, -1).split("|").map((c) => inline(c.trim()));
+        const tag = table ? "td" : "th";
+        table = table || [];
+        table.push(`<tr>${cells.map((c) => `<${tag}>${c}</${tag}>`).join("")}</tr>`);
+        continue;
+      }
+      endTable();
       const li = raw.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)$/);
       if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(li[1])}</li>`; continue; }
       if (inList) { html += "</ul>"; inList = false; }
@@ -440,6 +452,7 @@ window.OfficeApp = { start: function (api) {
       else if (raw.trim()) html += `<p>${inline(raw)}</p>`;
     }
     if (inList) html += "</ul>";
+    endTable();
     return html;
   }
 
