@@ -8,6 +8,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
+import * as fast from "./fastchrome.js";
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 
@@ -280,6 +281,35 @@ async function runDelivery(ref, job) {
   running.set(ref.id, { child: { kill: () => {} }, lock: "chrome" });
   let progress = [], dirty = false;
   const flush = setInterval(() => { if (dirty) { dirty = false; ref.update({ progress }).catch(() => {}); } }, 2500);
+  // Fast path: drive the warm tab directly (about 1-2 s). Falls back to the AI bot.
+  try {
+    const f = await fast.send({ url: t.url, which: t.isBoss ? "project" : "thread", message: job.command });
+    if (f.ok) {
+      clearInterval(flush);
+      running.delete(ref.id); locks.delete("chrome");
+      await ref.update({ status: "sent", progress: [{ t: Date.now(), text: `Đã gửi trong ${(f.timing.totalMs / 1000).toFixed(1)} giây` }], report: "",
+        sentAt: FieldValue.serverTimestamp(), watchNext: Date.now() + 15000, watchTries: 0, timing: f.timing });
+      log("delivered fast", ref.id, JSON.stringify(f.timing));
+      bumpIdle();
+      schedule();
+      return;
+    }
+    log("fast send not confirmed, checking before retry", ref.id);
+    // It may still have gone through: look before falling back, never send twice.
+    const seen = await fast.readReplies({ url: t.url, which: t.isBoss ? "project" : "thread", since: job.command }).catch(() => null);
+    if (seen && seen.found) {
+      clearInterval(flush); running.delete(ref.id); locks.delete("chrome");
+      await ref.update({ status: "sent", sentAt: FieldValue.serverTimestamp(), watchNext: Date.now() + 15000, watchTries: 0, report: "" });
+      bumpIdle(); schedule(); return;
+    }
+  } catch (e) {
+    log("fast send failed, using AI bot", ref.id, e.message);
+    if (/chưa đăng nhập|đang có chữ sẵn/.test(e.message)) {
+      clearInterval(flush); running.delete(ref.id); locks.delete("chrome");
+      await ref.update({ status: "error", error: e.message, finishedAt: FieldValue.serverTimestamp() });
+      schedule(); return;
+    }
+  }
   const prompt = `You are the office delivery bot. Post ONE message that Phuong typed into claude.ai.
 ${CHROME_RULES}
 Target URL: ${t.url}
@@ -323,8 +353,20 @@ state = "none" if no reply yet, "working" if the panel shows it is still working
   return chromeTask(prompt, 4 * 60 * 1000);
 }
 
+// Roster kept live in memory so a send does not wait for a read.
+let rosterCache = null;
+db.collection("office").doc("roster").onSnapshot((d) => {
+  const r = d.data() || {};
+  rosterCache = { ...JSON.parse(r.seedJson || "{}"), ...(r.threads || {}) };
+}, (e) => log("roster listener error", e.message));
+async function rosterThreads() {
+  const r = ((await db.collection("office").doc("roster").get()).data() || {});
+  return { ...JSON.parse(r.seedJson || "{}"), ...(r.threads || {}) };
+}
+
 // ---------- copying the employee's reply back from claude.ai ----------
-const WATCH_STEPS_MIN = [2, 3, 5, 8, 12, 20, 30];
+// Reading is cheap now (no AI): check often at first, then back off.
+const WATCH_STEPS_MIN = [0.25, 0.25, 0.5, 0.5, 1, 1, 2, 3, 5, 10];
 const WATCH_MAX_MS = 8 * 3600 * 1000;
 let watching = false;
 async function watchTick() {
@@ -344,11 +386,18 @@ async function watchTick() {
       return;
     }
     locks.add("chrome");
-    let r;
-    try { r = await checkReply(j); } finally { locks.delete("chrome"); }
-    const raw = String((r && r.text) || "");
     let info = null;
-    try { info = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch { /* keep null */ }
+    try {
+      const t = targetFor(j);
+      info = await fast.readReplies({ url: t.url, which: t.isBoss ? "project" : "thread", since: j.command });
+    } catch (e) {
+      log("fast read failed, using AI bot", e.message);
+      try {
+        const r = await checkReply(j);
+        const raw = String((r && r.text) || "");
+        info = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+      } catch { info = null; }
+    } finally { locks.delete("chrome"); bumpIdle(); }
     const tries = (j.watchTries || 0) + 1;
     const next = Date.now() + WATCH_STEPS_MIN[Math.min(tries, WATCH_STEPS_MIN.length - 1)] * 60000;
     if (!info || info.state === "none") {
@@ -368,7 +417,19 @@ async function watchTick() {
     watching = false;
   }
 }
-setInterval(() => { watchTick(); }, 30000);
+setInterval(() => { watchTick(); }, 5000);
+
+// Close the warm tab after 10 idle minutes (nothing sending or being watched).
+let idleTimer = null;
+function bumpIdle() {
+  clearTimeout(idleTimer);
+  idleTimer = setTimeout(async () => {
+    const busy = locks.has("chrome") || (await jobsCol.where("status", "in", ["sent", "replying", "queued", "sending"]).limit(1).get()).size;
+    if (busy) return bumpIdle();
+    await fast.closeTab();
+    log("warm tab closed (idle)");
+  }, 10 * 60 * 1000);
+}
 
 // ---------- scheduler ----------
 let scheduling = false;
@@ -402,9 +463,7 @@ async function schedule() {
           return true;
         });
         if (!claimed) continue;
-        const r = ((await db.collection("office").doc("roster").get()).data() || {});
-        const threads = { ...JSON.parse(r.seedJson || "{}"), ...(r.threads || {}) };
-        const thread = threads[data.seatId] || "";
+        const thread = (rosterCache || await rosterThreads())[data.seatId] || "";
         if (data.seatId !== "boss" && !thread) {
           await ref.update({ status: "error", error: "Bàn này chưa gắn thread claude.ai.", finishedAt: FieldValue.serverTimestamp() });
           continue;
@@ -500,3 +559,4 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
   });
 }
 log("worker started; model", MODEL, "effort", EFFORT);
+fast.probe().then((r) => log("chrome control probe:", r));
