@@ -676,4 +676,5 @@ window.OfficeApp = { start: function (api) {
   // (runs after sign-in, from auth.js)
   if (hashId === "boss") openPanel({ kind: "boss" });
   else if (seats[hashId]) openPanel({ kind: "seat", seat: seats[hashId] });
+  else if (D.teams.some((t) => t.id === hashId)) openPanel({ kind: "team", team: D.teams.find((t) => t.id === hashId) });
 } };
