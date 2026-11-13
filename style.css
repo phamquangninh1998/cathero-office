@@ -689,3 +689,13 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 .msg .j-report { margin: 0; }
 .reply-box { display: flex; gap: 6px; align-items: flex-end; margin: 6px 0 8px; }
 .reply-box textarea { flex: 1; font-size: 15px; border-radius: 12px; padding: 8px 10px; min-height: 42px; }
+
+/* text-only status labels on desks */
+.bubble { min-width: 0 !important; height: auto !important; padding: 3px 9px !important; font-size: clamp(10.5px, calc(var(--seat) * .1), 13px) !important; font-weight: 800; white-space: nowrap; letter-spacing: 0 !important; }
+.bubble.run { background: #dbe4ff !important; color: #3b5bdb !important; } .bubble.run::after { border-top-color: #dbe4ff !important; }
+.bubble.wait { background: #f1f3f5 !important; color: #495057 !important; } .bubble.wait::after { border-top-color: #f1f3f5 !important; }
+.p-tstate { margin: 8px 0 0; font-size: 13.5px; background: #f8f9ff; border-radius: 12px; padding: 8px 10px; line-height: 1.4; }
+.p-tstate time { color: var(--muted); font-size: 12px; }
+.ts-label { font-weight: 800; padding: 1px 7px; border-radius: 999px; font-size: 12px; }
+.ts-label.run { background: #dbe4ff; color: #3b5bdb; } .ts-label.ask { background: #fff3bf; color: #b35c00; }
+.ts-label.idle { background: #f1f3f5; color: #495057; } .ts-label.done { background: #d3f9d8; color: #2b8a3e; }

@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, sig
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114n";
+import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114p";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -51,6 +51,8 @@ async function startOffice(user) {
       (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))),
       (err) => console.warn("jobs", err)
     ),
+    watchThreadStates: (cb) => onSnapshot(doc(db, "office", "threadStates"),
+      (d) => cb(d.exists() ? (d.data().seats || {}) : {}), (err) => console.warn("threadStates", err)),
     watchWorker: (cb) => onSnapshot(doc(db, "office", "worker"),
       (d) => cb(d.exists() ? d.data() : null), (err) => console.warn("worker", err))
   };
@@ -80,7 +82,8 @@ if (DEMO) {
       { id: "t3", seatId: "b1-artist", batchId: "b1-demo", batchOrder: 2, status: "waiting", note: "nhân viên cùng thư mục đang làm việc trước, xếp hàng chờ", command: "Mỗi người đề xuất 3 việc nên làm tuần này", createdAt: T(now - 300000) },
       { id: "d2", seatId: "chung-data", status: "done", command: "Thử hệ thống", createdAt: T(now - 900000), startedAt: T(now - 880000), finishedAt: T(now - 60000), report: "Mình đã đọc xong cả 4 thư mục.\n\n| Game | Nhánh |\n|---|---|\n| Spacecraft | `main` |\n| Invaders | `art/blender-models` |" }
     ]),
-    watchWorker: (cb) => cb({ lastSeen: T(now) })
+watchThreadStates: (cb) => cb({ "b2-developer": { kind: "run", label: "Đang làm", summary: "Đang sửa lỗi màn 12", ago: "3m" }, "b3-artist": { kind: "ask", label: "Cần bạn", summary: "Chọn ý tưởng 1, 2 hoặc 3", ago: "2h" }, "chung-qa": { kind: "run", label: "Đang làm", summary: "Testing build 2 on Galaxy A17", ago: "2h" } }),
+        watchWorker: (cb) => cb({ lastSeen: T(now) })
   });
   setState("in");
 }

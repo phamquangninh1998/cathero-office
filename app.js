@@ -189,6 +189,7 @@ window.OfficeApp = { start: function (api) {
     $("#p-link").hidden = true;
     renderHistory();
     renderPanelJobs();
+    renderThreadState();
     markSeen(cur);
     document.body.classList.add("panel-open");
     panel.setAttribute("aria-hidden", "false");
@@ -247,10 +248,19 @@ window.OfficeApp = { start: function (api) {
 
     renderHistory();
     renderPanelJobs();
+    renderThreadState();
     markSeen(cur);
     document.body.classList.add("panel-open");
     panel.setAttribute("aria-hidden", "false");
     setTimeout(() => $("#p-cmd").focus(), 220);
+  }
+
+  function renderThreadState() {
+    const box = $("#p-tstate");
+    if (!box) return;
+    const ts = current && current.kind === "seat" ? threadStates[current.seat.id] : null;
+    box.hidden = !ts;
+    if (ts) box.innerHTML = `<b>Trên claude.ai:</b> <span class="ts-label ${ts.kind}">${esc(ts.label)}</span> ${esc(ts.summary || "")}${ts.ago ? ` <time>${esc(ts.ago)}</time>` : ""}`;
   }
 
   function closePanel() {
@@ -419,6 +429,7 @@ window.OfficeApp = { start: function (api) {
   // Hired seats get a direct "Giao việc": the command goes into the Firestore
   // queue, the worker on the Mac runs it and writes progress + a report back.
   let jobs = [];
+  let threadStates = {};
   let worker = null;
   const STATUS = {
     queued: ["Đang chờ máy nhận", "wait"],
@@ -511,17 +522,20 @@ window.OfficeApp = { start: function (api) {
       const list = seatJobs(id);
       const active = list.find((j) => ACTIVE.includes(j.status));
       const latest = list[0];
+      // Text labels only (no icons). Web jobs in flight win; otherwise the
+      // real state of the employee's claude.ai thread.
       let kind = "", label = "";
       const asking = list.find((j) => j.status === "needs_you");
-      if (asking) { kind = "ask"; label = "?"; }
-      else if (active) {
-        kind = active.status === "running" ? "run" : "wait";
-        label = active.status === "running" ? "" : "⏳";
-      } else if (latest && latest.finishedAt && tsMs(latest.finishedAt) > store.get(seenKey(id), 0)) {
+      const ts = threadStates[id];
+      if (active && ["queued", "waiting", "sending"].includes(active.status)) { kind = "wait"; label = "Đang gửi"; }
+      else if (asking || (ts && ts.kind === "ask")) { kind = "ask"; label = "Cần bạn"; }
+      else if ((ts && ts.kind === "run") || (active && ["running", "replying", "delegated", "sent"].includes(active.status))) { kind = "run"; label = "Đang làm"; }
+      else if (latest && latest.finishedAt && tsMs(latest.finishedAt) > store.get(seenKey(id), 0)) {
         const k = (STATUS[latest.status] || [])[1];
-        kind = k === "ok" ? "ok" : k === "ask" ? "ask" : k === "err" ? "err" : "";
-        label = kind === "ok" ? "✓" : kind === "ask" ? "?" : kind === "err" ? "!" : "";
+        if (k === "ok") { kind = "ok"; label = "Xong"; } else if (k === "err") { kind = "err"; label = "Lỗi"; }
       }
+      const seatBtn = el.closest(".seat");
+      if (seatBtn && ts && ts.summary) seatBtn.title = `${ts.label}: ${ts.summary}${ts.ago ? " (" + ts.ago + ")" : ""}`;
       const seatEl = el.closest(".seat");
       if (seatEl) {
         seatEl.classList.toggle("busy", !!active);
@@ -534,8 +548,8 @@ window.OfficeApp = { start: function (api) {
       }
       el.hidden = !kind;
       el.className = "bubble " + kind;
-      el.textContent = kind === "run" ? "…" : label;
-      el.title = kind ? (active ? STATUS[active.status][0] : STATUS[latest.status][0]) : "";
+      el.textContent = label;
+      el.title = label;
     });
   }
 
@@ -788,6 +802,7 @@ window.OfficeApp = { start: function (api) {
     else if (current) { renderPanelJobs(); markSeen(current); }
   });
   api.watchWorker((w) => { worker = w; renderWorker(); });
+  if (api.watchThreadStates) api.watchThreadStates((m) => { threadStates = m || {}; renderBubbles(); if (current && current.kind === "seat") renderThreadState(); });
   setInterval(() => { if (!document.hidden) renderWorker(); }, 60000);
 
   document.addEventListener("click", (e) => {

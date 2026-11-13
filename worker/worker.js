@@ -411,9 +411,49 @@ async function watchTick() {
 }
 setInterval(() => { watchTick(); }, 5000);
 
+// ---------- desk status from claude.ai's own thread list ----------
+// Every 45 s (when Chrome is free) read the project's Threads overview and store
+// each desk's real state, so work handed out in chat shows on the web too.
+const SECTION_LABEL = [[/^Waiting/i, "ask", "Cần bạn"], [/^Working/i, "run", "Đang làm"], [/^Idle/i, "idle", "Rảnh"], [/^Resolved/i, "done", "Xong"]];
+let overviewBusy = false, lastOverview = "";
+async function overviewTick() {
+  if (overviewBusy || watching || locks.has("chrome") || pending.some((p) => p.data.mode !== "local")) return;
+  overviewBusy = true;
+  locks.add("chrome");
+  try {
+    const rows = await fast.readOverview(PROJECT_URL);
+    if (!rows.length) return;
+    const threads = rosterCache || await rosterThreads();
+    const byThread = Object.fromEntries(Object.entries(threads).map(([seat, th]) => [th, seat]));
+    const out = {};
+    for (const r of rows) {
+      const seat = byThread[r.id];
+      if (!seat) continue;
+      const m = SECTION_LABEL.find(([re]) => re.test(r.section)) || [null, "idle", r.state || "Rảnh"];
+      out[seat] = { kind: m[1], label: m[2], summary: r.summary.slice(0, 300), ago: r.ago, unread: !!r.unread, title: r.title };
+    }
+    const key = JSON.stringify(out);
+    if (key !== lastOverview) {
+      lastOverview = key;
+      await db.collection("office").doc("threadStates").set({ seats: out, readAt: Timestamp.now() });
+    } else {
+      await db.collection("office").doc("threadStates").set({ readAt: Timestamp.now() }, { merge: true });
+    }
+  } catch (e) {
+    log("overview read failed", e.message);
+  } finally {
+    locks.delete("chrome");
+    overviewBusy = false;
+  }
+}
+setInterval(overviewTick, 45000);
+setTimeout(overviewTick, 5000);
+
 // Close the warm tab after 10 idle minutes (nothing sending or being watched).
 let idleTimer = null;
 function bumpIdle() {
+  // The desk-status poll uses the tab every 45 s, so it stays open (one tab only).
+  if (true) return;
   clearTimeout(idleTimer);
   idleTimer = setTimeout(async () => {
     const busy = locks.has("chrome") || (await jobsCol.where("status", "in", ["sent", "replying", "delegated", "queued", "sending"]).limit(1).get()).size;

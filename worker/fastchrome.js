@@ -203,3 +203,65 @@ export async function readConversation({ url, which }) {
   });
   return { rows, working: busy };
 }
+
+// Project overview (the "Threads" list): one entry per thread with its state.
+const OVERVIEW_CODE = `JSON.stringify((() => {
+  // Expand collapsed sections ("Show more") so every thread row is rendered.
+  [...document.querySelectorAll('section button')].filter(b => /^Show more$/i.test((b.innerText || "").trim())).forEach(b => b.click());
+  return [...document.querySelectorAll('[data-testid=overview-thread-row]')].map(r => {
+    const leaves = [...r.querySelectorAll('*')].filter(e => !e.children.length && e.textContent.trim()).map(e => e.textContent.trim());
+    const sec = r.closest('section');
+    const head = sec ? ((sec.querySelector('h1,h2,h3,h4,[role=heading]') || {}).textContent || "") : "";
+    return { id: r.getAttribute('data-home-card') || "", leaves, section: head.replace(/[·\\d\\s]+$/, "").trim() };
+  });
+})())`;
+const STATE_RE = /^(Needs attention|Working|Idle|Done|Review ready|Blocked|Failed|Stopped|Waiting)/i;
+function parseOverviewRow(r) {
+  const leaves = r.leaves.map((x) => x.replace(/[\u200b-\u200f\ufeff]/g, "").trim()).filter(Boolean);
+  const unread = leaves.includes("Unread");
+  const rest = leaves.filter((x) => x !== "Unread");
+  const si = rest.findIndex((x) => STATE_RE.test(x));
+  const ti = Math.max(0, rest.findIndex((x) => x.includes("·")));
+  return { id: r.id, section: r.section || "", title: rest[ti] || "", summary: rest.slice(ti + 1, si > ti ? si : ti + 2).join(" ").trim(), state: si >= 0 ? rest[si] : "", ago: si >= 0 ? (rest[si + 1] || "") : "", unread };
+}
+
+export async function readOverview(projectUrl) {
+  const { created } = await warmTab(projectUrl);
+  if (!created) {
+    const [cur] = (await osa("state", tabId)).split("|");
+    if (cur !== projectUrl) await osa("go", tabId, projectUrl);
+  }
+  const t = Date.now();
+  let clicked = false;
+  while (Date.now() - t < 12000) {
+    const rows = await js(OVERVIEW_CODE).catch(() => null);
+    if (Array.isArray(rows) && rows.length) {
+      await sleep(250);
+      const expanded = await js(OVERVIEW_CODE).catch(() => rows);
+      const seen = new Map([...rows, ...(expanded || [])].map((r) => [r.id, r]));
+      for (let step = 0; step < 12; step++) {
+        const moved = await js(`(() => {
+          const row = document.querySelector('[data-testid=overview-thread-row]');
+          let el = row && row.parentElement;
+          while (el && !(el.scrollHeight > el.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(el).overflowY))) el = el.parentElement;
+          if (!el) return "end";
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 2) { el.scrollTop = 0; return "end"; }
+          el.scrollTop += Math.max(200, el.clientHeight - 80);
+          return "moved";
+        })()`).catch(() => "end");
+        if (moved !== "moved") break;
+        await sleep(120);
+        const more = await js(OVERVIEW_CODE).catch(() => []);
+        for (const r of more || []) seen.set(r.id, r);
+      }
+      return [...seen.values()].map(parseOverviewRow);
+    }
+    if (!clicked && Date.now() - t > 1500) {
+      // Open the Threads overview panel from the project header.
+      const r = await js(`(() => { const b = [...document.querySelectorAll('[aria-label]')].find(b => /^Threads/.test(b.getAttribute('aria-label')) && b.getBoundingClientRect().y < 40 && b.getBoundingClientRect().x < window.innerWidth * 0.75); if (!b) return "no"; b.click(); return "yes"; })()`).catch(() => "no");
+      clicked = r === "yes";
+    }
+    await sleep(250);
+  }
+  return [];
+}
