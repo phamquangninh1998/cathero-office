@@ -42,18 +42,76 @@ async function js(code) {
 }
 
 // Point the tab at `url` (no reload if already there) and wait for the composer.
-async function goReady(url, which, timeoutMs = 20000) {
-  const { created } = await warmTab(url);
+// In-page navigation: claude.ai is a single-page app. After the first load we
+// switch threads by clicking rows in its Threads list, so the tab never reloads.
+const PROJECT_RE = /^https:\/\/claude\.ai\/code\/project\/[^/?#]+/;
+
+async function ensureProject(url) {
+  const base = (url.match(PROJECT_RE) || [url])[0];
+  const { created } = await warmTab(base);
   if (!created) {
     const [cur] = (await osa("state", tabId)).split("|");
-    if (cur !== url) await osa("go", tabId, url);
+    if (!cur.startsWith(base)) await osa("go", tabId, base);
   }
   const t = Date.now();
-  while (Date.now() - t < timeoutMs) {
-    const st = await js(`JSON.stringify({ ok: !!document.querySelector(${JSON.stringify(SEL[which])}), login: /\\/login|challenge/.test(location.href) })`).catch(() => null);
+  while (Date.now() - t < 20000) {
+    const st = await js(`JSON.stringify({ ok: !!document.querySelector('[data-testid="code-prompt-input"]'), login: /\\/login|challenge/.test(location.href) })`).catch(() => null);
     if (st && st.login) throw new Error("Chrome chưa đăng nhập claude.ai");
     if (st && st.ok) return;
-    await sleep(120);
+    await sleep(150);
+  }
+  throw new Error("Không mở được trang project");
+}
+
+// Show the Threads list in the right panel (click, no reload).
+async function showOverview() {
+  for (let i = 0; i < 25; i++) {
+    const r = await js(`(() => {
+      if (document.querySelector('[data-testid=overview-thread-row]')) return "ok";
+      const cands = [...document.querySelectorAll('[aria-label]')].filter(b => /^Threads/.test(b.getAttribute('aria-label')) && b.getBoundingClientRect().y < 40);
+      const b = cands.find(b => b.getAttribute('aria-label') === 'Threads') || cands[0];
+      if (!b) return "none";
+      b.click(); return "clicked";
+    })()`).catch(() => "none");
+    if (r === "ok") return true;
+    await sleep(200);
+  }
+  return false;
+}
+
+async function openThreadInPlace(url) {
+  const id = (url.match(/thread=(cmsg_[A-Za-z0-9]+)/) || [])[1];
+  await ensureProject(url);
+  if (!id) return;
+  const here = async () => (await js(`location.href.includes(${JSON.stringify(id)}) && !!document.querySelector(${JSON.stringify(SEL.thread)}) ? "yes" : "no"`).catch(() => "no")) === "yes";
+  if (await here()) return;
+  if (await showOverview()) {
+    for (let i = 0; i < 3; i++) {
+      const r = await js(`(() => {
+        [...document.querySelectorAll('section button')].filter(b => /^Show more$/i.test((b.innerText || "").trim())).forEach(b => b.click());
+        const row = document.querySelector('[data-testid=overview-thread-row][data-home-card=${JSON.stringify(id)}]');
+        if (!row) return "missing";
+        (row.querySelector('a,button,[role=button]') || row).click();
+        return "clicked";
+      })()`).catch(() => "missing");
+      if (r === "clicked") {
+        for (let k = 0; k < 40; k++) { if (await here()) return; await sleep(120); }
+      }
+      await sleep(250);
+    }
+  }
+  // Not in the list (e.g. resolved): fall back to the link (one reload).
+  await osa("go", tabId, url);
+  for (let k = 0; k < 120; k++) { if (await here()) return; await sleep(150); }
+  throw new Error("Không mở được thread");
+}
+
+async function goReady(url, which) {
+  if (which === "thread") await openThreadInPlace(url);
+  else await ensureProject(url);
+  for (let k = 0; k < 60; k++) {
+    if ((await js(`document.querySelector(${JSON.stringify(SEL[which])}) ? "y" : "n"`).catch(() => "n")) === "y") return;
+    await sleep(150);
   }
   throw new Error("Không thấy ô chat trên trang");
 }
@@ -62,7 +120,9 @@ function rowsCode(which) {
   return `JSON.stringify((() => {
     const feeds = [...document.querySelectorAll('[role=feed]')].map(f => ({ f, x: f.getBoundingClientRect().x })).sort((a, b) => a.x - b.x);
     if (!feeds.length) return { rows: [], working: false };
-    const feed = (${JSON.stringify(which)} === "thread" ? feeds[feeds.length - 1] : feeds[0]).f;
+    const pick = ${JSON.stringify(which)} === "thread" ? feeds.filter(o => o.x > window.innerWidth * 0.45).pop() : feeds[0];
+    if (!pick) return { rows: [], working: false };
+    const feed = pick.f;
     const rows = [...feed.querySelectorAll('[data-testid=transcript-row]')].map(r => ({ h: ((r.querySelector('h3') || {}).textContent || ""), text: r.innerText || "" }));
     return { rows, working: !!feed.querySelector('[data-working-row]') };
   })())`;
@@ -170,7 +230,9 @@ function convoCode(which) {
   return `JSON.stringify((() => {
     const feeds = [...document.querySelectorAll('[role=feed]')].map(f => ({ f, x: f.getBoundingClientRect().x })).sort((a, b) => a.x - b.x);
     if (!feeds.length) return { rows: [], working: false };
-    const feed = (${JSON.stringify(which)} === "thread" ? feeds[feeds.length - 1] : feeds[0]).f;
+    const pick = ${JSON.stringify(which)} === "thread" ? feeds.filter(o => o.x > window.innerWidth * 0.45).pop() : feeds[0];
+    if (!pick) return { rows: [], working: false };
+    const feed = pick.f;
     const rows = [...feed.querySelectorAll('[data-testid=transcript-row]')].map(r => {
       const h = ((r.querySelector('h3') || {}).textContent || "");
       const time = r.querySelector('time[datetime]');
@@ -221,16 +283,14 @@ function parseOverviewRow(r) {
   const unread = leaves.includes("Unread");
   const rest = leaves.filter((x) => x !== "Unread");
   const si = rest.findIndex((x) => STATE_RE.test(x));
-  const ti = Math.max(0, rest.findIndex((x) => x.includes("·")));
+  let ti = rest.findIndex((x) => x.includes("·"));
+  if (ti < 0) ti = Math.max(0, rest.findIndex((x) => /\p{L}{2,}/u.test(x)));
   return { id: r.id, section: r.section || "", title: rest[ti] || "", summary: rest.slice(ti + 1, si > ti ? si : ti + 2).join(" ").trim(), state: si >= 0 ? rest[si] : "", ago: si >= 0 ? (rest[si + 1] || "") : "", unread };
 }
 
 export async function readOverview(projectUrl) {
-  const { created } = await warmTab(projectUrl);
-  if (!created) {
-    const [cur] = (await osa("state", tabId)).split("|");
-    if (cur !== projectUrl) await osa("go", tabId, projectUrl);
-  }
+  await ensureProject(projectUrl);
+  await showOverview();
   const t = Date.now();
   let clicked = false;
   while (Date.now() - t < 12000) {
@@ -265,3 +325,26 @@ export async function readOverview(projectUrl) {
   }
   return [];
 }
+
+// Full text of the newest reply in a thread (what the employee is asking).
+export async function latestReply(url) {
+  await openThreadInPlace(url);
+  for (let k = 0; k < 30; k++) {
+    const out = await js(`JSON.stringify((() => {
+      // Only the thread panel on the right, never the project chat on the left.
+      const feed = [...document.querySelectorAll('[role=feed]')].find(f => f.getBoundingClientRect().x > window.innerWidth * 0.45);
+      if (!feed) return null;
+      const rows = [...feed.querySelectorAll('[data-testid=transcript-row]')].filter(r => /^Claude responded/i.test((r.querySelector('h3') || {}).textContent || ""));
+      const last = rows[rows.length - 1];
+      if (!last) return null;
+      const body = last.querySelector('[data-cds=Prose]');
+      const t = last.querySelector('time[datetime]');
+      return { text: (body ? body.innerText : last.innerText).trim().slice(0, 4000), at: t ? t.getAttribute('datetime') : "" };
+    })())`).catch(() => null);
+    if (out && out.text) return out;
+    await sleep(200);
+  }
+  return null;
+}
+
+export async function backToOverview() { await showOverview(); }

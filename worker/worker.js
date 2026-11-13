@@ -215,7 +215,7 @@ async function watchTick() {
   if (watching || locks.has("chrome") || pending.length > 0) return;
   watching = true;
   try {
-    const due = watchedDocs.filter((d) => !d.get("replyTo") && (d.get("watchNext") || 0) <= Date.now())
+    const due = watchedDocs.filter((d) => !d.get("replyTo") && d.get("followUrl") !== "none" && d.get("watchNext") && d.get("watchNext") <= Date.now())
       .sort((a, b) => (a.get("watchNext") || 0) - (b.get("watchNext") || 0));
     const d = due[0];
     if (!d) return;
@@ -232,6 +232,7 @@ async function watchTick() {
     let conv = null, delegated = null;
     try {
       const isBoss = j.seatId === "boss";
+      if (isBoss && !j.followUrl && !overviewTitles.size) { return; }
       if (isBoss && !j.followUrl) {
         // CEO desk: wait for the coordinator; a thread card in its reply = handoff.
         const pc = await fast.readConversation({ url: PROJECT_URL, which: "project" });
@@ -243,7 +244,9 @@ async function watchTick() {
         if (card) {
           const seat = seatForCard(card.card);
           const threads = rosterCache || await rosterThreads();
-          delegated = { title: card.card, seatId: seat ? seat.id : null, url: seat && threads[seat.id] ? `${PROJECT_URL}?thread=${threads[seat.id]}` : null };
+          // Any thread can be followed: desks via the roster, others via the Threads list titles.
+          const tid = (seat && threads[seat.id]) || overviewTitles.get(card.card.replace(/\s+/g, " ").trim().toLowerCase()) || null;
+          delegated = { title: card.card, seatId: seat ? seat.id : null, url: tid ? `${PROJECT_URL}?thread=${tid}` : null };
         }
         conv = { rows: after.map((r) => ({ who: "coordinator", text: r.text, at: r.at })), working: pc.working, found: idx >= 0 };
       } else {
@@ -274,7 +277,12 @@ async function watchTick() {
       Object.assign(upd, { status: "delegated", delegatedTo: delegated.title, delegatedSeat: delegated.seatId || null,
         followUrl: delegated.url || null, watchTries: 0, watchNext: Date.now() + 15000, lastActivity: Date.now(),
         conversation: conv.rows.slice(-20) });
-      if (!delegated.url) Object.assign(upd, { note: "Không tìm được thread của người được giao; xem trong project chat." });
+      if (!delegated.url) {
+        // Thread not found in the Threads list: show the handoff as the result instead of a stale "working".
+        Object.assign(upd, { status: "done", followUrl: "none", watchNext: FieldValue.delete(), finishedAt: FieldValue.serverTimestamp(),
+          report: `Đã giao cho: ${delegated.title}.` + (conv.rows.length ? "\n\n" + conv.rows.map((r) => r.text).join("\n\n").slice(0, 4000) : ""),
+          note: "Xem tiếp trong thread đó trên claude.ai." });
+      }
       log("delegated", d.id, delegated.title);
       await d.ref.update(upd);
       return;
@@ -304,7 +312,10 @@ async function watchTick() {
     }
     if (upd.status && upd.status !== "done" && upd.status !== "needs_you") upd.ask = FieldValue.delete();
     await d.ref.update(upd);
-    if (upd.status && upd.status !== j.status) log("job", d.id, j.status, "->", upd.status);
+    if (upd.status && upd.status !== j.status) {
+      log("job", d.id, j.status, "->", upd.status);
+      setTimeout(() => overviewTick(), 4000);
+    }
   } catch (e) {
     log("watch error", e.message);
   } finally {
@@ -321,6 +332,8 @@ setInterval(() => { watchTick(); }, 5000);
 // each desk's real state, so work handed out in chat shows on the web too.
 const SECTION_LABEL = [[/^Waiting/i, "ask", "Cần bạn"], [/^Working/i, "run", "Đang làm"], [/^Idle/i, "idle", "Rảnh"], [/^Resolved/i, "done", "Xong"]];
 let overviewBusy = false, lastOverview = "";
+const detailCache = new Map();
+const overviewTitles = new Map();
 async function overviewTick() {
   if (overviewBusy || watching || locks.has("chrome") || pending.length > 0) return;
   overviewBusy = true;
@@ -328,6 +341,7 @@ async function overviewTick() {
   try {
     const rows = await fast.readOverview(PROJECT_URL);
     if (!rows.length) return;
+    for (const r of rows) if (r.title) overviewTitles.set(r.title.replace(/\s+/g, " ").trim().toLowerCase(), r.id);
     const threads = rosterCache || await rosterThreads();
     const byThread = Object.fromEntries(Object.entries(threads).map(([seat, th]) => [th, seat]));
     const out = {};
@@ -337,10 +351,25 @@ async function overviewTick() {
       const m = SECTION_LABEL.find(([re]) => re.test(r.section)) || [null, "idle", r.state || "Rảnh"];
       out[seat] = { kind: m[1], label: m[2], summary: r.summary.slice(0, 300), ago: r.ago, unread: !!r.unread, title: r.title };
     }
+    // For desks that wait on Phuong, keep the employee's full latest message so
+    // the web can show the real question. Re-read only when that thread changed.
+    let reads = 0;
+    for (const [seat, st] of Object.entries(out)) {
+      if (st.kind !== "ask") continue;
+      const sig = `${st.summary}|${st.ago}`;
+      const cached = detailCache.get(seat);
+      if (cached && cached.sig === sig) { st.detail = cached.detail; continue; }
+      if (reads >= 4) { if (cached) st.detail = cached.detail; continue; }
+      reads++;
+      const latest = await fast.latestReply(`${PROJECT_URL}?thread=${threads[seat]}`).catch(() => null);
+      if (latest) { detailCache.set(seat, { sig, detail: latest.text }); st.detail = latest.text; }
+    }
+    if (reads) await fast.backToOverview().catch(() => {});
     const key = JSON.stringify(out);
     if (key !== lastOverview) {
       lastOverview = key;
       await db.collection("office").doc("threadStates").set({ seats: out, readAt: Timestamp.now() });
+      log("desk states updated");
     }
   } catch (e) {
     log("overview read failed", e.message);
@@ -349,7 +378,7 @@ async function overviewTick() {
     overviewBusy = false;
   }
 }
-setInterval(overviewTick, 45000);
+setInterval(overviewTick, 50000);
 setTimeout(overviewTick, 5000);
 
 // Close the warm tab after 10 idle minutes (nothing sending or being watched).

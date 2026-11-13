@@ -260,7 +260,8 @@ window.OfficeApp = { start: function (api) {
     if (!box) return;
     const ts = current && current.kind === "seat" ? threadStates[current.seat.id] : null;
     box.hidden = !ts;
-    if (ts) box.innerHTML = `<b>Trên claude.ai:</b> <span class="ts-label ${ts.kind}">${esc(ts.label)}</span> ${esc(ts.summary || "")}${ts.ago ? ` <time>${esc(ts.ago)}</time>` : ""}`;
+    if (ts) box.innerHTML = `<b>Trên claude.ai:</b> <span class="ts-label ${ts.kind}">${esc(ts.label)}</span> ${esc(ts.summary || "")}${ts.ago ? ` <time>${esc(ts.ago)}</time>` : ""}`
+      + (ts.detail ? `<div class="ts-detail j-report">${md(ts.detail)}</div>${ts.kind === "ask" ? `<span class="ts-hint">Trả lời bằng ô Lệnh bên dưới, tin sẽ vào thẳng thread này.</span>` : ""}` : "");
   }
 
   function closePanel() {
@@ -534,7 +535,9 @@ window.OfficeApp = { start: function (api) {
       // real state of the employee's claude.ai thread.
       let kind = "", label = "";
       const asking = list.find((j) => j.status === "needs_you");
-      const ts = threadStates[id];
+      let ts = threadStates[id];
+      // A newer answer seen by the web (job finished after the last list read) wins.
+      if (ts && latest && latest.finishedAt && tsMs(latest.finishedAt) > threadStatesAt && latest.status !== "needs_you") ts = null;
       if (active && ["queued", "waiting", "sending"].includes(active.status)) { kind = "wait"; label = "Đang gửi"; }
       else if (asking || (ts && ts.kind === "ask")) { kind = "ask"; label = "Cần bạn"; }
       else if ((ts && ts.kind === "run") || (active && ["running", "replying", "delegated", "sent"].includes(active.status))) { kind = "run"; label = "Đang làm"; }
@@ -810,7 +813,8 @@ window.OfficeApp = { start: function (api) {
     else if (current) { renderPanelJobs(); markSeen(current); }
   });
   api.watchWorker((w) => { worker = w; renderWorker(); });
-  if (api.watchThreadStates) api.watchThreadStates((m) => { threadStates = m || {}; renderBubbles(); if (current && current.kind === "seat") renderThreadState(); });
+  let threadStatesAt = 0;
+  if (api.watchThreadStates) api.watchThreadStates((m, at) => { threadStates = m || {}; threadStatesAt = at || Date.now(); renderBubbles(); if (current && current.kind === "seat") renderThreadState(); });
   setInterval(() => { if (!document.hidden) renderWorker(); }, 60000);
 
   document.addEventListener("click", (e) => {

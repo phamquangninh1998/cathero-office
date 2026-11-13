@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, sig
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114r";
+import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114s";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -52,7 +52,7 @@ async function startOffice(user) {
       (err) => console.warn("jobs", err)
     ),
     watchThreadStates: (cb) => onSnapshot(doc(db, "office", "threadStates"),
-      (d) => cb(d.exists() ? (d.data().seats || {}) : {}), (err) => console.warn("threadStates", err)),
+      (d) => cb(d.exists() ? (d.data().seats || {}) : {}, d.exists() && d.data().readAt ? d.data().readAt.toMillis() : 0), (err) => console.warn("threadStates", err)),
     watchWorker: (cb) => onSnapshot(doc(db, "office", "worker"),
       (d) => cb(d.exists() ? d.data() : null), (err) => console.warn("worker", err))
   };
