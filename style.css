@@ -584,8 +584,8 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 
 /* ---------------- team broadcast ---------------- */
 .team-btn {
-  position: absolute; top: 8px; right: 8px; z-index: 3; border: 0; cursor: pointer;
-  background: rgba(255,255,255,.85); border-radius: 999px; padding: 4px 10px; font-weight: 800;
+  position: absolute; top: -13px; right: -6px; z-index: 3; border: 0; cursor: pointer;
+  background: #fff; border-radius: 999px; padding: 4px 10px; font-weight: 800;
   font-size: clamp(11px, calc(var(--seat) * .1), 14px); color: #5c5468;
   box-shadow: 0 2px 0 color-mix(in srgb, var(--zc) 60%, #000 6%); transition: transform .12s, background .12s;
 }
