@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cat Hero Studio · Văn phòng</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-8 -8 16 16'%3E%3Cg fill='%23ff922b'%3E%3Cellipse cx='0' cy='3' rx='4.2' ry='3.4'/%3E%3Ccircle cx='-4.5' cy='-2' r='1.8'/%3E%3Ccircle cx='-1.5' cy='-4.6' r='1.8'/%3E%3Ccircle cx='1.8' cy='-4.6' r='1.8'/%3E%3Ccircle cx='4.7' cy='-2' r='1.8'/%3E%3C/g%3E%3C/svg%3E">
+</head>
+<body data-auth="loading">
+  <section class="gate" id="gate">
+    <div class="gate-card">
+      <span class="logo big" aria-hidden="true"><svg viewBox="-8 -8 16 16"><g fill="#fff"><ellipse cx="0" cy="3" rx="4.2" ry="3.4"/><circle cx="-4.5" cy="-2" r="1.8"/><circle cx="-1.5" cy="-4.6" r="1.8"/><circle cx="1.8" cy="-4.6" r="1.8"/><circle cx="4.7" cy="-2" r="1.8"/></g></svg></span>
+      <h1>Cat Hero Studio</h1>
+      <div class="gate-loading"><p>Đang kiểm tra đăng nhập…</p></div>
+      <div class="gate-signedout">
+        <p>Văn phòng nội bộ. Chỉ tài khoản Gmail được cấp quyền mới vào được.</p>
+        <button class="btn google" id="btn-google">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+          Đăng nhập bằng Google
+        </button>
+      </div>
+      <div class="gate-denied">
+        <p>Tài khoản <b id="denied-email"></b> không có quyền vào văn phòng này.</p>
+        <button class="btn primary" id="btn-switch">Đăng xuất, dùng tài khoản khác</button>
+      </div>
+      <p class="gate-error" id="gate-error"></p>
+    </div>
+  </section>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"><svg viewBox="-8 -8 16 16"><g fill="#fff"><ellipse cx="0" cy="3" rx="4.2" ry="3.4"/><circle cx="-4.5" cy="-2" r="1.8"/><circle cx="-1.5" cy="-4.6" r="1.8"/><circle cx="1.8" cy="-4.6" r="1.8"/><circle cx="4.7" cy="-2" r="1.8"/></g></svg></span>
+      <div><h1 id="brand-name">Cat Hero Studio</h1><p>Văn phòng · mỗi nhân viên là một thread Claude</p></div>
+    </div>
+    <div class="stats">
+      <span class="stat"><b id="stat-staff">0</b> nhân viên</span>
+      <span class="stat"><b id="stat-open">0</b> ghế đang tuyển</span>
+      <span class="stat clock" id="clock">--:--</span>
+      <button class="btn primary" id="btn-coordinator">Nhắn điều phối</button>
+      <button class="btn ghost user-chip" id="btn-signout" title="Đăng xuất"><span id="user-email"></span><span aria-hidden="true">⎋</span></button>
+    </div>
+  </header>
+
+  <main class="office">
+    <div class="wall" aria-hidden="true">
+      <div class="window"><span class="planet p1"></span><span class="stars"></span></div>
+      <div class="poster"><b>CAT HERO</b><small>save the universe</small></div>
+      <div class="window"><span class="rocket-fly"></span><span class="stars"></span></div>
+      <div class="poster poster-b"><b>SHIP IT!</b><small>mỗi ngày một build</small></div>
+      <div class="window"><span class="planet p2"></span><span class="stars"></span></div>
+    </div>
+    <div class="floor" id="floor"></div>
+    <p class="footnote">Bấm vào một nhân viên để giao việc. Web này không gửi thẳng được vào claude.ai: nút <b>Gửi</b> sẽ copy lệnh và mở đúng thread, bạn chỉ cần dán rồi Enter.</p>
+  </main>
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="panel" id="panel" aria-hidden="true" aria-label="Giao việc">
+    <header class="p-head">
+      <div class="p-avatar" id="p-avatar"></div>
+      <div class="p-titles">
+        <span class="pill" id="p-badge"></span>
+        <h2 id="p-title"></h2>
+        <p id="p-sub"></p>
+      </div>
+      <button class="icon-btn" id="p-close" aria-label="Đóng">✕</button>
+    </header>
+
+    <p class="p-desc" id="p-desc"></p>
+
+    <div class="p-section">
+      <label class="p-label" for="p-cmd">Lệnh</label>
+      <div class="chips" id="p-chips"></div>
+      <textarea id="p-cmd" rows="5" placeholder="Viết việc cần giao…"></textarea>
+      <div class="p-actions">
+        <button class="btn primary big" id="p-send">Gửi <span class="kbd">⌘↵</span></button>
+        <a class="btn ghost" id="p-open" target="_blank" rel="noopener">Mở thread ↗</a>
+      </div>
+      <p class="p-note">Gửi tới <b id="p-target"></b>. Lệnh được copy sẵn, sang tab claude.ai bấm vào ô chat, dán (⌘V) rồi Enter.</p>
+    </div>
+
+    <div class="p-section" id="p-history" hidden>
+      <span class="p-label">Lệnh đã gửi gần đây</span>
+      <ul class="history" id="p-history-list"></ul>
+    </div>
+
+    <details class="p-section p-link" id="p-link">
+      <summary id="p-link-summary">Gắn link thread</summary>
+      <input id="p-link-input" type="url" placeholder="https://claude.ai/code/project/…?thread=cmsg_…">
+      <div class="p-actions">
+        <button class="btn small" id="p-link-save">Lưu</button>
+      </div>
+      <p class="p-note">Lưu online, mọi máy đều thấy. Để gỡ nhân viên khỏi bàn, để trống rồi bấm Lưu.</p>
+    </details>
+  </aside>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="data.js"></script>
+  <script src="art.js"></script>
+  <script src="app.js"></script>
+  <script type="module" src="auth.js"></script>
+</body>
+</html>
