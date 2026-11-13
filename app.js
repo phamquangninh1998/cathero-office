@@ -732,8 +732,8 @@ window.OfficeApp = { start: function (api) {
       box.hidden = batches.length === 0;
       const openIds = new Set([...box.querySelectorAll("details[open]")].map((d) => d.closest(".job").dataset.id));
       const key = "team-" + current.team.id;
-      const firstRender = box.dataset.seat !== key;
-      box.dataset.seat = key;
+      const firstRender = box.dataset.shownFor !== key;
+      box.dataset.shownFor = key;
       $("#p-jobs-list").innerHTML = batches.map((b, i) => batchCard(b, firstRender ? i === 0 : openIds.has(b.id))).join("");
       return;
     }
@@ -742,8 +742,8 @@ window.OfficeApp = { start: function (api) {
     box.hidden = list.length === 0;
     // keep the user's open/closed choice across live updates
     const openIds = new Set([...box.querySelectorAll("details[open]")].map((d) => d.closest(".job").dataset.id));
-    const firstRender = !box.dataset.seat || box.dataset.seat !== sid;
-    box.dataset.seat = sid;
+    const firstRender = !box.dataset.shownFor || box.dataset.shownFor !== sid;
+    box.dataset.shownFor = sid;
     $("#p-jobs-list").innerHTML = list.map((j, i) => jobCard(j, firstRender ? i === 0 : openIds.has(j.id) || (i === 0 && (ACTIVE.includes(j.status) || j.status === "needs_you"))))
       .join("");
     [...$("#p-jobs-list").children].forEach((li, i) => { li.dataset.id = list[i].id; });
