@@ -30,7 +30,8 @@ const TEAMS = {
   sports: { name: "100 Sports", game: "100 Sports", folder: path.join(ROOT, "100Sports") },
   moe: { name: "Moe Family", game: "Moe Family Only Up", folder: path.join(HOME, "Documents", "GitHub", "MoeFamily") },
   paperroll: { name: "Paper Roll", game: "Paper Roll: Lazy Cat", folder: path.join(ROOT, "Paper-roll-Lazy-Cat") },
-  chung: { name: "Chung", game: "cả 7 game", folder: null }
+  chung: { name: "Chung", game: "cả 7 game", folder: null },
+  ceo: { name: "Bàn CEO", game: "cả studio", folder: null }
 };
 const GAME_FOLDERS = Object.values(TEAMS).map((t) => t.folder).filter(Boolean);
 
@@ -72,7 +73,24 @@ async function folderBusy(folder) {
   return out.trim() ? "thread của game đang sửa thư mục này, chờ xong rồi chạy" : null;
 }
 
+function ceoPrompt(job) {
+  const cli = `node ${path.join(ROOT, "CatHeroOffice", "worker", "office-cli.mjs")}`;
+  return [
+    `You are the CEO assistant of Cat Hero Studio, sitting at the CEO desk of Anh Ninh (Phuong) in the studio office web page. Phuong is waiting on that page for your answer.`,
+    `The studio has 8 teams and 26 senior employees (each a Claude session run by the same office queue). Office tool (run with Bash):`,
+    `  ${cli} roster            -> teams and seat ids`,
+    `  ${cli} status [--hours N] -> latest job, status and report summary per employee`,
+    `  ${cli} report <jobId>     -> one full report`,
+    `  ${cli} dispatch --seat <seatId> --command "..."  or  --team <teamId> --command "..."  -> give work to an employee or a whole team (they run on this Mac and report on their own desks)`,
+    `Game folders (read only for you): ${GAME_FOLDERS.join(", ")}. Never edit game files yourself; delegate changes to the right employee with dispatch. Write your own notes only in ${path.join(ROOT, "CatHeroOffice", "workspace", "ceo")}.`,
+    `When you dispatch, write a clear self-contained brief (goal, constraints, what done looks like) in Vietnamese, pick the right seat or team, and avoid duplicate work that is already queued or running (check status first). Do not dispatch more than 6 jobs per request unless Phuong asked for it.`,
+    `Outward actions are NOT allowed in this run and must not be delegated either: store submissions, publishing, pushing to public places, ad campaigns or budgets, sending messages, purchases, deleting data. If one is needed, begin your final message with "CẦN XÁC NHẬN:" and say exactly what, where and why.`,
+    `Your final message is the report on the CEO desk: Vietnamese, lead with the answer, short bullets, list any jobs you dispatched (employee + one-line task + job id), and say what you could not verify. No em-dashes.`
+  ].join("\n");
+}
+
 function rolePrompt(job, team) {
+  if (job.team === "ceo") return ceoPrompt(job);
   const threadLink = job.thread ? `${PROJECT_URL}?thread=${job.thread}` : PROJECT_URL;
   const where = team.folder
     ? `Your game folder is ${team.folder}. Work only inside it. Do not edit any other game folder (${GAME_FOLDERS.filter((f) => f !== team.folder).join(", ")}) or anything else outside your folder, except notes in your memory.`
@@ -129,7 +147,7 @@ async function runJob(ref, job) {
   log("run", ref.id, job.title, short(job.command, 80), resumeId ? `(resume ${resumeId})` : "");
   await ref.update({ status: "running", startedAt: FieldValue.serverTimestamp(), note: FieldValue.delete(), sessionId, progress: [] });
 
-  const child = spawn(CLAUDE, args, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}` } });
+  const child = spawn(CLAUDE, args, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, OFFICE_PARENT_JOB: ref.id, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}` } });
   running.set(ref.id, { child, lock });
 
   let progress = [];

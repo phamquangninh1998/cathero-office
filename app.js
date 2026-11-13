@@ -81,11 +81,12 @@ window.OfficeApp = { start: function (api) {
       <div class="plant plant-l">${A.plantSVG(0)}</div>
       <div class="plant plant-r">${A.plantSVG(1)}</div>
       <button class="seat boss" data-seat="boss" aria-label="${esc(b.name)} · ${esc(b.title)}">
+        <span class="bubble" data-bubble="boss" hidden></span>
         <div class="seat-art">${A.seatSVG({ look: b.look, hired: true, boss: true, prop: "", label: b.title })}</div>
         <div class="cat">${A.catSVG()}</div>
         <div class="seat-label boss-label"><span class="role">${esc(b.name)}</span><span class="pill gold">Bàn giám đốc</span></div>
       </button>
-      <p class="boss-hint">Bấm vào bàn mình để nhắn điều phối</p>
+      <p class="boss-hint">Bấm vào bàn mình để hỏi Trợ lý CEO</p>
     </section>`;
   }
 
@@ -144,9 +145,10 @@ window.OfficeApp = { start: function (api) {
     }
     if (cur.kind === "boss") {
       return [
-        "Tạo thread mới: ",
-        "Báo cáo tình hình cả studio hôm nay.",
-        "Ai đang bị kẹt và cần mình quyết định gì?"
+        "Báo cáo tình hình cả studio hôm nay: team nào đang làm gì, xong gì.",
+        "Ai đang bị kẹt và cần mình quyết định gì?",
+        "Tổng hợp báo cáo mới nhất của tất cả nhân viên thành 5 ý chính.",
+        "Chia việc này cho đúng người: "
       ];
     }
     const s = cur.seat;
@@ -198,14 +200,14 @@ window.OfficeApp = { start: function (api) {
       ? A.seatSVG({ look: D.boss.look, hired: true, boss: true, label: D.boss.title })
       : A.seatSVG({ look: s.look, prop: s.role.prop, hired });
     $("#p-title").textContent = isBoss ? `${D.boss.name} · ${D.boss.title}` : s.title;
-    $("#p-sub").textContent = isBoss ? "Gửi lệnh cho điều phối trong project chat"
+    $("#p-sub").textContent = isBoss ? "Trợ lý CEO trên Mac mini"
       : `${s.team.name} · ${s.team.game}${s.team.shared ? "" : " · " + s.team.project}`;
     $("#p-desc").textContent = isBoss
-      ? "Điều phối là Claude trong project chat: tạo thread mới, chia việc, tổng hợp báo cáo."
+      ? "Trợ lý CEO (Opus 5.5, high) đọc toàn bộ dự án và báo cáo của 26 nhân viên, trả lời câu hỏi chung của studio và tự chia việc cho đúng người hoặc đúng team. Kết quả hiện ngay ở đây."
       : s.role.desc;
 
     const badge = $("#p-badge");
-    badge.textContent = isBoss ? "Giám đốc" : "Senior · Opus 5.5";
+    badge.textContent = isBoss ? "Trợ lý CEO · Opus 5.5" : "Senior · Opus 5.5";
     badge.className = "pill " + (isBoss ? "gold" : "on");
 
     const target = targetFor(cur);
@@ -421,7 +423,7 @@ window.OfficeApp = { start: function (api) {
   };
   const ACTIVE = ["queued", "waiting", "running"];
 
-  function canRunJob(cur) { return cur.kind === "seat" || cur.kind === "team"; }
+  function canRunJob(cur) { return true; }
 
   function tsMs(t) { return t ? (t.toMillis ? t.toMillis() : +t) : Date.now(); }
 
@@ -436,6 +438,8 @@ window.OfficeApp = { start: function (api) {
         await Promise.all(teamSeats(team).map((s, order) => api.createJob({
           seatId: s.id, title: s.title, role: s.roleKey, team: team.id, command: text, batchId, batchOrder: order
         })));
+      } else if (current.kind === "boss") {
+        await api.createJob({ seatId: "boss", title: "Trợ lý CEO", role: "ceo", team: "ceo", command: text });
       } else {
         const s = current.seat;
         await api.createJob({ seatId: s.id, title: s.title, role: s.roleKey, team: s.team.id, command: text });
@@ -479,9 +483,10 @@ window.OfficeApp = { start: function (api) {
       renderBubbles();
       return;
     }
-    if (cur.kind !== "seat") return;
-    const latest = seatJobs(cur.seat.id)[0];
-    if (latest && latest.finishedAt) store.set(seenKey(cur.seat.id), tsMs(latest.finishedAt));
+    const sid = cur.kind === "boss" ? "boss" : cur.kind === "seat" ? cur.seat.id : null;
+    if (!sid) return;
+    const latest = seatJobs(sid)[0];
+    if (latest && latest.finishedAt) store.set(seenKey(sid), tsMs(latest.finishedAt));
     renderBubbles();
   }
 
@@ -633,12 +638,13 @@ window.OfficeApp = { start: function (api) {
       $("#p-jobs-list").innerHTML = batches.map((b, i) => batchCard(b, firstRender ? i === 0 : openIds.has(b.id))).join("");
       return;
     }
-    const list = seatJobs(current.seat.id).slice(0, 6);
+    const sid = current.kind === "boss" ? "boss" : current.seat.id;
+    const list = seatJobs(sid).slice(0, 6);
     box.hidden = list.length === 0;
     // keep the user's open/closed choice across live updates
     const openIds = new Set([...box.querySelectorAll("details[open]")].map((d) => d.closest(".job").dataset.id));
-    const firstRender = !box.dataset.seat || box.dataset.seat !== current.seat.id;
-    box.dataset.seat = current.seat.id;
+    const firstRender = !box.dataset.seat || box.dataset.seat !== sid;
+    box.dataset.seat = sid;
     $("#p-jobs-list").innerHTML = list.map((j, i) => jobCard(j, firstRender ? i === 0 : openIds.has(j.id) || (i === 0 && ACTIVE.includes(j.status))))
       .join("");
     [...$("#p-jobs-list").children].forEach((li, i) => { li.dataset.id = list[i].id; });
