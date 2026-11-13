@@ -2,6 +2,13 @@
 window.OfficeApp = { start: function (api) {
   const D = window.OFFICE_DATA;
   const A = window.OfficeArt;
+  // Each person is drawn once as a static image (SVG inside <img>): no live SVG
+  // nodes in the page and no animation, so phones stay cool.
+  const avatarCache = {};
+  function avatar(key, opts) {
+    if (!avatarCache[key]) avatarCache[key] = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(A.seatSVG(opts));
+    return avatarCache[key];
+  }
   const $ = (sel, root) => (root || document).querySelector(sel);
 
   // ---------- storage (per-browser conveniences only) ----------
@@ -48,78 +55,45 @@ window.OfficeApp = { start: function (api) {
     });
   }
 
-  // ---------- render ----------
-  function seatButton(s) {
-    const hired = true;
-    return `<button class="seat hired" data-seat="${s.id}" aria-label="${esc(s.title)}">
-      <span class="bubble" data-bubble="${s.id}" hidden></span>
-      <div class="seat-art">${A.seatSVG({ look: s.look, prop: s.role.prop, hired })}</div>
-      <div class="seat-label">
-        <span class="role">${esc(s.role.label)}</span>
-        <span class="pill on">Senior${s.thread ? ' <i class="tlink" title="Có thread claude.ai">●</i>' : ""}</span>
-      </div>
+  // ---------- render (plain and light: no art, no animation) ----------
+  function teamIcon(team) {
+    const src = team.appIcon && (api.icons || {})[team.id];
+    return src ? `<img class="t-icon" src="${src}" alt="" width="40" height="40" decoding="async">` : `<span class="t-icon t-emoji">👥</span>`;
+  }
+
+  function empRow(s) {
+    return `<button class="emp" data-seat="${s.id}">
+      <img class="emp-av" src="${avatar(s.id, { look: s.look, prop: s.role.prop, hired: true })}" width="46" height="49" alt="" decoding="async">
+      <span class="emp-role">${esc(s.role.label)}</span>
+      <span class="emp-st" data-st="${s.id}">Rảnh</span>
     </button>`;
   }
 
   function zone(team) {
     const list = team.seats.map((x) => seats[`${team.id}-${x.role}`]);
-    return `<section class="zone ${team.shared ? "shared" : ""}" style="--zc:${team.color}" data-zone="${team.id}">
-      ${team.appIcon && (api.icons || {})[team.id] ? `<img class="zone-app" src="${(api.icons || {})[team.id]}" alt="${esc(team.project)}">` : ""}
-      <header class="zone-sign" data-team="${team.id}">
-        ${team.appIcon ? "" : `<span class="zone-icon">${A.ICONS[team.icon] || ""}</span>`}
-        <span class="zone-text"><b>${esc(team.name)} · ${esc(team.game)}</b><small>${esc(team.project)}</small></span>
+    return `<section class="team" data-zone="${team.id}">
+      <header class="t-head">
+        ${teamIcon(team)}
+        <div class="t-name"><b>${esc(team.name)}</b><small>${esc(team.shared ? team.project : team.project)}</small></div>
       </header>
-      <div class="desks">${list.map(seatButton).join("")}</div>
-      <button class="team-btn" data-team="${team.id}" title="Nhắn cả team ${esc(team.name)}"><span class="tb-ico">📣</span>Nhắn cả team</button>
+      <div class="emps">${list.map(empRow).join("")}</div>
+      <button class="team-btn" data-team="${team.id}">📣 Nhắn cả team</button>
     </section>`;
   }
 
   function bossArea() {
-    const b = D.boss;
-    return `<section class="boss-area">
-      <div class="boss-rug"></div>
-      <div class="plant plant-l">${A.plantSVG(0)}</div>
-      <div class="plant plant-r">${A.plantSVG(1)}</div>
-      <button class="seat boss" data-seat="boss" aria-label="${esc(b.name)} · ${esc(b.title)}">
-        <span class="bubble" data-bubble="boss" hidden></span>
-        <div class="seat-art">${A.seatSVG({ look: b.look, hired: true, boss: true, prop: "", label: b.title })}</div>
-        <div class="cat">${A.catSVG()}</div>
-        <div class="seat-label boss-label"><span class="role">${esc(b.name)}</span><span class="pill gold">Bàn giám đốc</span></div>
+    return `<section class="team ceo">
+      <button class="emp ceo-row" data-seat="boss">
+        <img class="emp-av" src="${avatar("boss", { look: D.boss.look, hired: true, boss: true, label: D.boss.title })}" width="46" height="49" alt="" decoding="async">
+        <span class="emp-role"><b>${esc(D.boss.name)}</b> · nhắn điều phối (project chat)</span>
+        <span class="emp-st" data-st="boss"></span>
       </button>
-      <p class="boss-hint">Bấm vào bàn mình để nhắn điều phối</p>
-    </section>`;
-  }
-
-  // Coffee corner that fills the empty grid cell next to Paper Roll.
-  function lounge() {
-    return `<section class="lounge" aria-hidden="true">
-      <div class="lounge-sign">☕ Góc cà phê</div>
-      <div class="lounge-art">
-        <div class="sofa"></div>
-        <div class="cat-nap">${A.catSVG()}</div>
-        <div class="coffee"><i></i></div>
-        <div class="plant lounge-plant">${A.plantSVG(1)}</div>
-      </div>
     </section>`;
   }
 
   function render() {
-    const byId = Object.fromEntries(D.teams.map((t) => [t.id, t]));
-    const floor = $("#floor");
-    floor.innerHTML =
-      `<div class="area a-b1">${zone(byId.b1)}</div>
-       <div class="area a-b2">${zone(byId.b2)}</div>
-       <div class="area a-boss">${bossArea()}</div>
-       <div class="area a-b3">${zone(byId.b3)}</div>
-       <div class="area a-b4">${zone(byId.b4)}</div>
-       <div class="area a-sports">${zone(byId.sports)}</div>
-       <div class="area a-moe">${zone(byId.moe)}</div>
-       <div class="area a-paperroll">${zone(byId.paperroll)}</div>
-       <div class="area a-lounge">${lounge()}</div>
-       <div class="area a-chung">${zone(byId.chung)}</div>`;
-
-    const all = Object.values(seats);
-    $("#stat-staff").textContent = all.length;
+    $("#floor").innerHTML = bossArea() + D.teams.map(zone).join("");
+    $("#stat-staff").textContent = Object.keys(seats).length;
     $("#stat-open").textContent = D.teams.length;
     $("#brand-name").textContent = D.studio;
     renderBubbles();
@@ -163,7 +137,7 @@ window.OfficeApp = { start: function (api) {
     panel.classList.remove("log-mode");
     const members = teamSeats(team);
     const icon = team.appIcon && (api.icons || {})[team.id];
-    $("#p-avatar").innerHTML = icon ? `<img class="p-team-icon" src="${icon}" alt="">` : `<div class="p-team-icon svg">${A.ICONS[team.icon] || ""}</div>`;
+    $("#p-avatar").innerHTML = icon ? `<img class="t-icon" src="${icon}" alt="">` : `<span class="t-icon t-emoji">👥</span>`;
     $("#p-title").textContent = `Cả team ${team.name}`;
     $("#p-sub").textContent = `${members.length} người: ${members.map((m) => m.role.label).join(", ")}`;
     $("#p-desc").textContent = team.shared
@@ -198,8 +172,8 @@ window.OfficeApp = { start: function (api) {
     const hired = true;
 
     $("#p-avatar").innerHTML = isBoss
-      ? A.seatSVG({ look: D.boss.look, hired: true, boss: true, label: D.boss.title })
-      : A.seatSVG({ look: s.look, prop: s.role.prop, hired });
+      ? `<img class="p-av" src="${avatar("boss", { look: D.boss.look, hired: true, boss: true, label: D.boss.title })}" alt="">`
+      : `<img class="p-av" src="${avatar(s.id, { look: s.look, prop: s.role.prop, hired: true })}" alt="">`;
     $("#p-title").textContent = isBoss ? `${D.boss.name} · ${D.boss.title}` : s.title;
     $("#p-sub").textContent = isBoss ? "Gửi vào project chat (điều phối) trên claude.ai"
       : `${s.team.name} · ${s.team.game}${s.team.shared ? "" : " · " + s.team.project}`;
@@ -347,12 +321,7 @@ window.OfficeApp = { start: function (api) {
   }
   function shake(el) { el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake"); }
 
-  function tickClock() {
-    const d = new Date();
-    $("#clock").textContent = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-    const h = d.getHours();
-    document.body.classList.toggle("night", h < 6 || h >= 18);
-  }
+
 
   // ---------- events ----------
   function wire() {
@@ -495,34 +464,20 @@ window.OfficeApp = { start: function (api) {
   }
 
   function renderBubbles() {
-    document.querySelectorAll("[data-bubble]").forEach((el) => {
-      const id = el.getAttribute("data-bubble");
+    document.querySelectorAll("[data-st]").forEach((el) => {
+      const id = el.getAttribute("data-st");
       const list = seatJobs(id);
       const active = list.find((j) => ACTIVE.includes(j.status));
       const latest = list[0];
-      let kind = "", label = "";
-      if (active) {
-        kind = active.status === "running" ? "run" : "wait";
-        label = active.status === "running" ? "" : "⏳";
-      } else if (latest && latest.finishedAt && tsMs(latest.finishedAt) > store.get(seenKey(id), 0)) {
-        const k = (STATUS[latest.status] || [])[1];
-        kind = k === "ok" ? "ok" : k === "ask" ? "ask" : k === "err" ? "err" : "";
-        label = kind === "ok" ? "✓" : kind === "ask" ? "?" : kind === "err" ? "!" : "";
+      let text = id === "boss" ? "" : "Rảnh", kind = "idle";
+      if (active) { text = STATUS[active.status][0]; kind = STATUS[active.status][1]; }
+      else if (latest) {
+        const unseen = latest.finishedAt && tsMs(latest.finishedAt) > store.get(seenKey(id), 0);
+        text = (STATUS[latest.status] || [latest.status])[0] + (unseen ? " · mới" : "");
+        kind = unseen ? (STATUS[latest.status] || [])[1] || "idle" : "idle";
       }
-      const seatEl = el.closest(".seat");
-      if (seatEl) {
-        seatEl.classList.toggle("busy", !!active);
-        const fresh = list.find((j) => ACTIVE.includes(j.status) && Date.now() - tsMs(j.createdAt) < 12000);
-        if (fresh && !seatEl.dataset.flashed?.includes(fresh.id)) {
-          seatEl.dataset.flashed = (seatEl.dataset.flashed || "") + " " + fresh.id;
-          seatEl.classList.remove("incoming"); void seatEl.offsetWidth; seatEl.classList.add("incoming");
-          setTimeout(() => seatEl.classList.remove("incoming"), 3600);
-        }
-      }
-      el.hidden = !kind;
-      el.className = "bubble " + kind;
-      el.innerHTML = kind === "run" ? "<i></i><i></i><i></i>" : label;
-      el.title = kind ? (active ? STATUS[active.status][0] : STATUS[latest.status][0]) : "";
+      if (el.textContent !== text) el.textContent = text;
+      el.className = "emp-st " + kind;
     });
   }
 
@@ -617,7 +572,7 @@ window.OfficeApp = { start: function (api) {
     return `<li class="job ${kind}" data-id="${j.id}">
       <details ${open ? "open" : ""}>
         <summary>
-          <span class="j-chip ${kind}">${kind === "run" ? '<i class="spin"></i>' : ""}${label}</span>
+          <span class="j-chip ${kind}">${label}</span>
           <span class="j-cmd">${esc(j.command)}</span>
           <time>${esc(when)}</time>
         </summary>
@@ -639,7 +594,7 @@ window.OfficeApp = { start: function (api) {
       const s = seats[j.seatId];
       const [st, k] = STATUS[j.status] || [j.status, "off"];
       return `<li class="member ${k}">
-        <div class="m-head"><b>${esc(s ? s.role.label : j.title)}</b><span class="j-chip ${k}">${k === "run" ? '<i class="spin"></i>' : ""}${st}</span></div>
+        <div class="m-head"><b>${esc(s ? s.role.label : j.title)}</b><span class="j-chip ${k}">${st}</span></div>
         ${j.status === "running" && (j.progress || []).length ? `<p class="j-note">${esc(j.progress[j.progress.length - 1].text)}</p>` : ""}
         ${j.status === "waiting" && j.note ? `<p class="j-note">${esc(j.note)}</p>` : ""}
         ${j.report ? `<div class="j-report">${md(j.report)}</div>` : ""}
@@ -649,7 +604,7 @@ window.OfficeApp = { start: function (api) {
     return `<li class="job batch ${kind}" data-id="${batch.id}">
       <details ${open ? "open" : ""}>
         <summary>
-          <span class="j-chip ${kind}">${kind === "run" ? '<i class="spin"></i>' : ""}${label}</span>
+          <span class="j-chip ${kind}">${label}</span>
           <span class="j-cmd">${esc(first.command)}</span>
           <time>${esc(ago(tsMs(first.createdAt)))}</time>
         </summary>
@@ -697,7 +652,7 @@ window.OfficeApp = { start: function (api) {
     current = { kind: "log", filter: "all" };
     const panel = $("#panel");
     panel.classList.add("log-mode");
-    $("#p-avatar").innerHTML = `<div class="p-team-icon svg log-ico">📒</div>`;
+    $("#p-avatar").innerHTML = `<span class="t-icon t-emoji">📒</span>`;
     $("#p-title").textContent = "Nhật ký giao việc";
     $("#p-sub").textContent = "Mọi việc trong studio, mới nhất ở trên";
     $("#p-desc").textContent = "Ai giao, ai nhận, đang ở bước nào và báo cáo ra sao. Bấm tên nhân viên để mở bàn của họ.";
@@ -712,7 +667,8 @@ window.OfficeApp = { start: function (api) {
     const f = current.filter || "all";
     $("#p-log-filters").innerHTML = teams.map(([id, name]) =>
       `<button class="lchip ${f === id ? "on" : ""}" data-log-filter="${id}">${esc(name)}</button>`).join("");
-    const list = jobs.filter((j) => f === "all" || j.team === f).slice(0, 60);
+    const all = jobs.filter((j) => f === "all" || j.team === f);
+    const list = all.slice(0, current.limit || 20);
     const openIds = new Set([...document.querySelectorAll("#p-log-list details[open]")].map((d) => d.closest(".job").dataset.id));
     $("#p-log-list").innerHTML = list.length ? list.map((j) => {
       const [st, k] = STATUS[j.status] || [j.status, "off"];
@@ -720,7 +676,7 @@ window.OfficeApp = { start: function (api) {
       return `<li class="job log ${k}" data-id="${j.id}">
         <details ${openIds.has(j.id) ? "open" : ""}>
           <summary>
-            <span class="j-chip ${k}">${k === "run" ? '<i class="spin"></i>' : ""}${esc(st)}</span>
+            <span class="j-chip ${k}">${esc(st)}</span>
             <span class="j-route"><b>${esc(fromLabel(j))}</b> → <button class="linkbtn" data-open-seat="${j.seatId}" data-open-job="${j.id}">${esc(seatName(j.seatId))}</button></span>
             <span class="j-cmd">${esc(j.command)}</span>
             <time>${esc(fmtTime(tsMs(j.createdAt)))}${j.finishedAt ? " · " + dur(j.startedAt || j.createdAt, j.finishedAt) : ""}</time>
@@ -732,7 +688,7 @@ window.OfficeApp = { start: function (api) {
           </div>
         </details>
       </li>`;
-    }).join("") : `<li class="j-note">Chưa có việc nào.</li>`;
+    }).join("") + (all.length > list.length ? `<li><button class="btn small ghost" data-log-more>Xem thêm</button></li>` : "") : `<li class="j-note">Chưa có việc nào.</li>`;
   }
 
   api.watchJobs((list) => {
@@ -743,7 +699,7 @@ window.OfficeApp = { start: function (api) {
     else if (current) { renderPanelJobs(); markSeen(current); }
   });
   api.watchWorker((w) => { worker = w; renderWorker(); });
-  setInterval(renderWorker, 30000);
+  setInterval(() => { if (!document.hidden) renderWorker(); }, 60000);
 
   document.addEventListener("click", (e) => {
     const r = e.target.closest("[data-open-seat]");
@@ -758,7 +714,8 @@ window.OfficeApp = { start: function (api) {
       return;
     }
     const lf = e.target.closest("[data-log-filter]");
-    if (lf) { current.filter = lf.dataset.logFilter; renderLog(); return; }
+    if (lf) { current.filter = lf.dataset.logFilter; current.limit = 20; renderLog(); return; }
+    if (e.target.closest("[data-log-more]")) { current.limit = (current.limit || 20) + 20; renderLog(); return; }
     if (e.target.closest("#btn-log")) { openLogPanel(); return; }
     const b = e.target.closest(".j-cancel-batch");
     if (b) {
@@ -774,8 +731,7 @@ window.OfficeApp = { start: function (api) {
   buildModel();
   render();
   wire();
-  tickClock();
-  setInterval(tickClock, 15000);
+
 
   // index.html#b1-developer (or #boss) opens that desk's panel directly.
   const hashId = decodeURIComponent(location.hash.slice(1));
