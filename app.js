@@ -426,6 +426,7 @@ window.OfficeApp = { start: function (api) {
     running: ["Đang làm", "run"],
     sending: ["Đang gửi vào claude.ai", "run"],
     sent: ["Đã gửi, chờ trả lời", "wait"],
+    send_failed: ["Lỗi gửi", "err"],
     replying: ["Đang làm trong thread", "run"],
     done: ["Xong", "ok"],
     needs_confirm: ["Cần bạn xác nhận", "ask"],
@@ -618,7 +619,7 @@ window.OfficeApp = { start: function (api) {
     }
     if (j.report) body += `<div class="j-report">${md(j.report)}</div>`;
     if (j.targetUrl) body += `<a class="btn small ghost j-open" href="${esc(j.targetUrl)}" target="_blank" rel="noopener">Mở thread ↗</a>`;
-    if (j.status === "error" && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
+    if ((j.status === "error" || j.status === "send_failed") && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
     const when = j.finishedAt ? `${ago(tsMs(j.finishedAt))} · ${dur(j.startedAt || j.createdAt, j.finishedAt)}`
       : j.startedAt ? `bắt đầu ${ago(tsMs(j.startedAt))}` : ago(tsMs(j.createdAt));
     return `<li class="job ${kind}" data-id="${j.id}">
