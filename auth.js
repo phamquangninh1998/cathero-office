@@ -62,7 +62,25 @@ async function startOffice(user) {
   setState("in");
 }
 
+// Local design preview with fake data: http://localhost:8765/?demo (never on the live site).
+const DEMO = location.hostname === "localhost" && new URLSearchParams(location.search).has("demo");
+if (DEMO) {
+  const T = (ms) => ({ toMillis: () => ms });
+  const now = Date.now();
+  window.OfficeApp.start({
+    threads: { "b1-developer": "demo", "b2-developer": "demo", "b3-developer": "demo", "b4-developer": "demo", "chung-marketing": "demo", "chung-data": "demo" },
+    history: {}, saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
+    watchJobs: (cb) => cb([
+      { id: "d1", seatId: "b2-developer", status: "running", command: "Kiểm tra lỗi màn 12", createdAt: T(now - 60000), startedAt: T(now - 50000), progress: [{ text: "Đọc: Assets/Scripts/Wave.cs" }] },
+      { id: "d2", seatId: "chung-data", status: "done", command: "Thử hệ thống", createdAt: T(now - 900000), startedAt: T(now - 880000), finishedAt: T(now - 60000), report: "Mình đã đọc xong cả 4 thư mục.\n\n| Game | Nhánh |\n|---|---|\n| Spacecraft | `main` |\n| Invaders | `art/blender-models` |" }
+    ]),
+    watchWorker: (cb) => cb({ lastSeen: T(now) })
+  });
+  setState("in");
+}
+
 onAuthStateChanged(auth, async (user) => {
+  if (DEMO) return;
   $("#gate-error").textContent = "";
   if (!user) { setState("signedout"); return; }
   if (!isAllowed(user)) {

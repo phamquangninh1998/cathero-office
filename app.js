@@ -103,6 +103,7 @@ window.OfficeApp = { start: function (api) {
     $("#stat-staff").textContent = hired;
     $("#stat-open").textContent = all.length - hired;
     $("#brand-name").textContent = D.studio;
+    renderBubbles();
   }
 
   // ---------- panel ----------
