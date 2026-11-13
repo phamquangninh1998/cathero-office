@@ -65,7 +65,8 @@ window.OfficeApp = { start: function (api) {
     const list = team.seats.map((x) => seats[`${team.id}-${x.role}`]);
     return `<section class="zone ${team.shared ? "shared" : ""}" style="--zc:${team.color}" data-zone="${team.id}">
       ${team.appIcon && (api.icons || {})[team.id] ? `<img class="zone-app" src="${(api.icons || {})[team.id]}" alt="${esc(team.project)}">` : ""}
-      <header class="zone-sign">
+      <button class="team-btn" data-team="${team.id}" title="Nhắn cả team ${esc(team.name)}">📣<span> Cả team</span></button>
+      <header class="zone-sign" data-team="${team.id}">
         ${team.appIcon ? "" : `<span class="zone-icon">${A.ICONS[team.icon] || ""}</span>`}
         <span class="zone-text"><b>${esc(team.name)} · ${esc(team.game)}</b><small>${esc(team.project)}</small></span>
       </header>
@@ -133,6 +134,14 @@ window.OfficeApp = { start: function (api) {
   }
 
   function templatesFor(cur) {
+    if (cur.kind === "team") {
+      return [
+        "Báo cáo tiến độ: mỗi người nói đã xong gì, đang làm gì, đang chờ gì.",
+        "Mỗi người đề xuất 3 việc nên làm tuần này cho game, theo vai trò của mình.",
+        "Họp nhanh: mỗi người nêu vấn đề lớn nhất của game hiện tại và cách sửa.",
+        "Mỗi người rà phần việc của mình và liệt kê lỗi hoặc điểm chưa ổn: "
+      ];
+    }
     if (cur.kind === "boss") {
       return [
         "Tạo thread mới: ",
@@ -144,7 +153,41 @@ window.OfficeApp = { start: function (api) {
     return D.common.concat(s.role.templates);
   }
 
+  function teamSeats(team) { return team.seats.map((x) => seats[`${team.id}-${x.role}`]); }
+
+  function openTeamPanel(team) {
+    const cur = { kind: "team", team };
+    current = cur;
+    const panel = $("#panel");
+    const members = teamSeats(team);
+    const icon = team.appIcon && (api.icons || {})[team.id];
+    $("#p-avatar").innerHTML = icon ? `<img class="p-team-icon" src="${icon}" alt="">` : `<div class="p-team-icon svg">${A.ICONS[team.icon] || ""}</div>`;
+    $("#p-title").textContent = `Cả team ${team.name}`;
+    $("#p-sub").textContent = `${members.length} người: ${members.map((m) => m.role.label).join(", ")}`;
+    $("#p-desc").textContent = team.shared
+      ? "Lệnh gửi cho từng người trong team; mỗi người làm theo vai trò của mình và báo cáo riêng, có thể chạy song song."
+      : "Lệnh gửi cho từng người trong team; mỗi người làm theo vai trò của mình và báo cáo riêng. Vì chung một thư mục game, họ làm lần lượt (Developer, Designer, Artist) để không giẫm chân nhau.";
+    const badge = $("#p-badge");
+    badge.textContent = "Nhắn cả team";
+    badge.className = "pill gold";
+    $("#p-open").hidden = true;
+    panel.classList.add("direct");
+    $("#p-send").firstChild.textContent = "Giao cho cả team ";
+    $("#p-chips").innerHTML = templatesFor(cur)
+      .map((t, i) => `<button class="chip" data-i="${i}">${esc(t.replace(/[: ]+$/, ""))}${/[: ]$/.test(t) ? "…" : ""}</button>`)
+      .join("");
+    $("#p-cmd").value = (store.get("drafts", {}))[historyKey()] || "";
+    $("#p-link").hidden = true;
+    renderHistory();
+    renderPanelJobs();
+    markSeen(cur);
+    document.body.classList.add("panel-open");
+    panel.setAttribute("aria-hidden", "false");
+    setTimeout(() => $("#p-cmd").focus(), 220);
+  }
+
   function openPanel(cur) {
+    if (cur.kind === "team") return openTeamPanel(cur.team);
     current = cur;
     const panel = $("#panel");
     const isBoss = cur.kind === "boss";
@@ -173,6 +216,7 @@ window.OfficeApp = { start: function (api) {
     $("#p-target").textContent = target.label;
     const direct = canRunJob(cur);
     panel.classList.toggle("direct", direct);
+    open.hidden = open.hidden || false;
     $("#p-send").firstChild.textContent = direct ? "Giao việc " : "Copy & mở ";
 
     $("#p-chips").innerHTML = templatesFor(cur)
@@ -205,7 +249,11 @@ window.OfficeApp = { start: function (api) {
     current = null;
   }
 
-  function historyKey() { return current.kind === "boss" ? "boss" : current.seat.id; }
+  function historyKey() {
+    if (current.kind === "boss") return "boss";
+    if (current.kind === "team") return "team-" + current.team.id;
+    return current.seat.id;
+  }
 
   function renderHistory() {
     const all = api.history;
@@ -306,6 +354,12 @@ window.OfficeApp = { start: function (api) {
   // ---------- events ----------
   function wire() {
     document.addEventListener("click", (e) => {
+      const teamEl = e.target.closest("[data-team]");
+      if (teamEl) {
+        const team = D.teams.find((t) => t.id === teamEl.getAttribute("data-team"));
+        if (team) openPanel({ kind: "team", team });
+        return;
+      }
       const seatEl = e.target.closest("[data-seat]");
       if (seatEl) {
         const id = seatEl.getAttribute("data-seat");
@@ -367,20 +421,29 @@ window.OfficeApp = { start: function (api) {
   };
   const ACTIVE = ["queued", "waiting", "running"];
 
-  function canRunJob(cur) { return cur.kind === "seat"; }
+  function canRunJob(cur) { return cur.kind === "seat" || cur.kind === "team"; }
 
   function tsMs(t) { return t ? (t.toMillis ? t.toMillis() : +t) : Date.now(); }
 
   async function sendJob(text) {
-    const s = current.seat;
     const btn = $("#p-send");
     btn.disabled = true;
+    const key = historyKey();
     try {
-      await api.createJob({ seatId: s.id, title: s.title, role: s.roleKey, team: s.team.id, command: text });
+      if (current.kind === "team") {
+        const team = current.team;
+        const batchId = `${team.id}-${Date.now().toString(36)}`;
+        await Promise.all(teamSeats(team).map((s, order) => api.createJob({
+          seatId: s.id, title: s.title, role: s.roleKey, team: team.id, command: text, batchId, batchOrder: order
+        })));
+      } else {
+        const s = current.seat;
+        await api.createJob({ seatId: s.id, title: s.title, role: s.roleKey, team: s.team.id, command: text });
+      }
       const all = api.history;
-      all[s.id] = [{ text, at: Date.now() }].concat((all[s.id] || []).filter((h) => h.text !== text)).slice(0, 12);
-      api.saveHistory(s.id, all[s.id]).catch(() => {});
-      const drafts = store.get("drafts", {}); delete drafts[s.id]; store.set("drafts", drafts);
+      all[key] = [{ text, at: Date.now() }].concat((all[key] || []).filter((h) => h.text !== text)).slice(0, 12);
+      api.saveHistory(key, all[key]).catch(() => {});
+      const drafts = store.get("drafts", {}); delete drafts[key]; store.set("drafts", drafts);
       $("#p-cmd").value = "";
       renderHistory();
       toast(workerOnline() ? "Đã giao việc. Báo cáo sẽ hiện ngay trong bảng này." : "Đã xếp hàng. Mac mini đang offline, máy bật lại sẽ tự làm.");
@@ -408,6 +471,14 @@ window.OfficeApp = { start: function (api) {
 
   function seenKey(seatId) { return "seen." + seatId; }
   function markSeen(cur) {
+    if (cur.kind === "team") {
+      teamSeats(cur.team).forEach((s) => {
+        const latest = seatJobs(s.id)[0];
+        if (latest && latest.finishedAt) store.set(seenKey(s.id), tsMs(latest.finishedAt));
+      });
+      renderBubbles();
+      return;
+    }
     if (cur.kind !== "seat") return;
     const latest = seatJobs(cur.seat.id)[0];
     if (latest && latest.finishedAt) store.set(seenKey(cur.seat.id), tsMs(latest.finishedAt));
@@ -510,9 +581,58 @@ window.OfficeApp = { start: function (api) {
     </li>`;
   }
 
+  function batchCard(batch, open) {
+    const first = batch.jobs[0];
+    const counts = {};
+    batch.jobs.forEach((j) => { const k = (STATUS[j.status] || [])[1] || "off"; counts[k] = (counts[k] || 0) + 1; });
+    const done = batch.jobs.filter((j) => !ACTIVE.includes(j.status)).length;
+    const kind = counts.err ? "err" : counts.ask ? "ask" : done === batch.jobs.length ? "ok" : counts.run ? "run" : "wait";
+    const label = done === batch.jobs.length ? `Xong ${done}/${batch.jobs.length}` : `${done}/${batch.jobs.length} xong`;
+    const rows = batch.jobs.map((j) => {
+      const s = seats[j.seatId];
+      const [st, k] = STATUS[j.status] || [j.status, "off"];
+      return `<li class="member ${k}">
+        <div class="m-head"><b>${esc(s ? s.role.label : j.title)}</b><span class="j-chip ${k}">${k === "run" ? '<i class="spin"></i>' : ""}${st}</span></div>
+        ${j.status === "running" && (j.progress || []).length ? `<p class="j-note">${esc(j.progress[j.progress.length - 1].text)}</p>` : ""}
+        ${j.status === "waiting" && j.note ? `<p class="j-note">${esc(j.note)}</p>` : ""}
+        ${j.report ? `<div class="j-report">${md(j.report)}</div>` : ""}
+        ${j.status === "error" && j.error ? `<p class="j-note err">${esc(j.error)}</p>` : ""}
+      </li>`;
+    }).join("");
+    return `<li class="job batch ${kind}" data-id="${batch.id}">
+      <details ${open ? "open" : ""}>
+        <summary>
+          <span class="j-chip ${kind}">${kind === "run" ? '<i class="spin"></i>' : ""}${label}</span>
+          <span class="j-cmd">${esc(first.command)}</span>
+          <time>${esc(ago(tsMs(first.createdAt)))}</time>
+        </summary>
+        <div class="j-body"><ul class="members">${rows}</ul>
+          ${batch.jobs.some((j) => ACTIVE.includes(j.status)) ? `<button class="btn small ghost j-cancel-batch" data-batch="${batch.id}">Huỷ cả lượt này</button>` : ""}
+        </div>
+      </details>
+    </li>`;
+  }
+
   function renderPanelJobs() {
     const box = $("#p-jobs");
     if (!current || !canRunJob(current)) { box.hidden = true; return; }
+    if (current.kind === "team") {
+      const ids = new Set(teamSeats(current.team).map((s) => s.id));
+      const map = new Map();
+      jobs.filter((j) => j.batchId && ids.has(j.seatId)).forEach((j) => {
+        if (!map.has(j.batchId)) map.set(j.batchId, { id: j.batchId, jobs: [] });
+        map.get(j.batchId).jobs.push(j);
+      });
+      const batches = [...map.values()].slice(0, 5);
+      batches.forEach((b) => b.jobs.sort((a, c) => (a.batchOrder || 0) - (c.batchOrder || 0)));
+      box.hidden = batches.length === 0;
+      const openIds = new Set([...box.querySelectorAll("details[open]")].map((d) => d.closest(".job").dataset.id));
+      const key = "team-" + current.team.id;
+      const firstRender = box.dataset.seat !== key;
+      box.dataset.seat = key;
+      $("#p-jobs-list").innerHTML = batches.map((b, i) => batchCard(b, firstRender ? i === 0 : openIds.has(b.id))).join("");
+      return;
+    }
     const list = seatJobs(current.seat.id).slice(0, 6);
     box.hidden = list.length === 0;
     // keep the user's open/closed choice across live updates
@@ -534,6 +654,12 @@ window.OfficeApp = { start: function (api) {
   setInterval(renderWorker, 30000);
 
   document.addEventListener("click", (e) => {
+    const b = e.target.closest(".j-cancel-batch");
+    if (b) {
+      const list = jobs.filter((j) => j.batchId === b.dataset.batch && ACTIVE.includes(j.status));
+      Promise.all(list.map((j) => api.cancelJob(j.id))).then(() => toast("Đã yêu cầu huỷ cả lượt.")).catch((err) => toast("Không huỷ được: " + err.message));
+      return;
+    }
     const c = e.target.closest(".j-cancel");
     if (!c) return;
     api.cancelJob(c.dataset.job).then(() => toast("Đã yêu cầu huỷ.")).catch((err) => toast("Không huỷ được: " + err.message));

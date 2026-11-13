@@ -73,6 +73,9 @@ if (DEMO) {
     history: {}, icons: Object.fromEntries(["b1", "b2", "b3", "b4", "sports", "moe", "paperroll"].map((k) => [k, `icons/${k}.png`])), saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
     watchJobs: (cb) => cb([
       { id: "d1", seatId: "b2-developer", status: "running", command: "Kiểm tra lỗi màn 12", createdAt: T(now - 60000), startedAt: T(now - 50000), progress: [{ text: "Đọc: Assets/Scripts/Wave.cs" }] },
+      { id: "t1", seatId: "b1-developer", batchId: "b1-demo", batchOrder: 0, status: "done", command: "Mỗi người đề xuất 3 việc nên làm tuần này", createdAt: T(now - 300000), startedAt: T(now - 290000), finishedAt: T(now - 200000), report: "- Sửa lỗi kẹt boss màn 18\n- Giảm dung lượng build\n- Thêm test tự động" },
+      { id: "t2", seatId: "b1-designer", batchId: "b1-demo", batchOrder: 1, status: "running", command: "Mỗi người đề xuất 3 việc nên làm tuần này", createdAt: T(now - 300000), startedAt: T(now - 100000), progress: [{ text: "Đọc: Docs/GameDesign.md" }] },
+      { id: "t3", seatId: "b1-artist", batchId: "b1-demo", batchOrder: 2, status: "waiting", note: "nhân viên cùng thư mục đang làm việc trước, xếp hàng chờ", command: "Mỗi người đề xuất 3 việc nên làm tuần này", createdAt: T(now - 300000) },
       { id: "d2", seatId: "chung-data", status: "done", command: "Thử hệ thống", createdAt: T(now - 900000), startedAt: T(now - 880000), finishedAt: T(now - 60000), report: "Mình đã đọc xong cả 4 thư mục.\n\n| Game | Nhánh |\n|---|---|\n| Spacecraft | `main` |\n| Invaders | `art/blender-models` |" }
     ]),
     watchWorker: (cb) => cb({ lastSeen: T(now) })

@@ -80,6 +80,7 @@ function rolePrompt(job, team) {
   return [
     `You are "${job.title}" (${team.name}, ${team.game}), a senior ${String(job.title).split(" · ")[0]} at Cat Hero Studio working for Phuong. Work like a senior: understand the codebase and project notes before changing anything, make careful, well-tested changes, keep the game's existing style and rules, and push back with reasons when a request would hurt the game.`,
     `This command was sent from the studio office web page and Phuong is waiting on that page for your report.`,
+    ...(job.batchId ? [`This request went to your whole team at once (every member gets it). Answer and act for your own role only; leave teammates' parts to them. Teammates in the same game folder run one after another, so keep your changes small and committed in clear steps.`] : []),
     where,
     `Outward actions are NOT allowed in this run: submitting or changing anything on App Store Connect or Google Play, publishing or pushing to public places, creating or changing ad campaigns or budgets, sending messages (Telegram, email, chat, social), purchases, deleting data or accounts. If the task needs one, do all the safe work first, then stop and begin your final message with "CẦN XÁC NHẬN:" and say exactly which action, its target and why, and ask Phuong to confirm it in the thread ${threadLink}.`,
     `Run at most one Unity batch/editor job at a time; follow the project notes in your memory.`,
@@ -203,7 +204,8 @@ async function schedule() {
   if (scheduling) return;
   scheduling = true;
   try {
-    const list = [...pending].sort((a, b) => (a.data.createdAt?.toMillis?.() || 0) - (b.data.createdAt?.toMillis?.() || 0));
+    const t = (d) => d.createdAt?.toMillis?.() || 0;
+    const list = [...pending].sort((a, b) => (t(a.data) - t(b.data)) || ((a.data.batchOrder || 0) - (b.data.batchOrder || 0)));
     for (const { ref, data } of list) {
       if (running.has(ref.id)) continue;
       if (data.cancelRequested) {
