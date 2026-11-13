@@ -702,3 +702,11 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 .ts-detail { margin-top: 8px; max-height: 45vh; overflow: auto; background: #fff; }
 .ts-hint { display: block; margin-top: 6px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
 .p-tstate:has(.ts-label.ask) { background: #fff8db; border: 1.5px solid #ffe066; }
+
+/* Idea maker: own desk right under the CEO desk */
+.boss-wrap { position: relative; display: flex; justify-content: center; align-items: center; }
+.boss-wrap .boss-rug { top: 50%; left: 50%; }
+.idea-desk { position: relative; z-index: 1; display: flex; justify-content: center; margin-top: calc(var(--seat) * .12); }
+.idea-desk .seat { flex: none; width: calc(var(--seat) * 1.05); background: rgba(255,255,255,.55); border: 1.5px solid #ffe066; }
+.idea-desk .seat-label .role { color: #8a5a00; }
+@media (max-width: 640px) { .idea-desk .seat { width: 120px; } }

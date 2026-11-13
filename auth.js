@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, sig
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114s";
+import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114t";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -71,7 +71,7 @@ if (DEMO) {
   const T = (ms) => ({ toMillis: () => ms });
   const now = Date.now();
   window.OfficeApp.start({
-    threads: { "b1-developer": "demo", "b2-developer": "demo", "b3-developer": "demo", "b4-developer": "demo", "chung-marketing": "demo", "chung-data": "demo" },
+    threads: { "idea-idea": "demo", "b1-developer": "demo", "b2-developer": "demo", "b3-developer": "demo", "b4-developer": "demo", "chung-marketing": "demo", "chung-data": "demo" },
     history: {}, icons: Object.fromEntries(["b1", "b2", "b3", "b4", "sports", "moe", "paperroll"].map((k) => [k, `icons/${k}.png`])), saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
     watchJobs: (cb) => cb([
       { id: "d1", seatId: "b2-developer", status: "running", command: "Kiểm tra lỗi màn 12", createdAt: T(now - 60000), startedAt: T(now - 50000), progress: [{ text: "Đọc: Assets/Scripts/Wave.cs" }] },

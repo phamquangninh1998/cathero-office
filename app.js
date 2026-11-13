@@ -47,7 +47,7 @@ window.OfficeApp = { start: function (api) {
         const thread = overrides[id] || "";
         seats[id] = {
           id, team, roleKey: seat.role, role,
-          title: `${role.label} · ${team.name}`,
+          title: team.center ? role.label : `${role.label} · ${team.name}`,
           thread,
           look: A.lookFor(id, role)
         };
@@ -83,16 +83,20 @@ window.OfficeApp = { start: function (api) {
 
   function bossArea() {
     const b = D.boss;
+    const idea = Object.values(seats).find((x) => x.team.center);
     return `<section class="boss-area">
-      <div class="boss-rug"></div>
       <div class="plant plant-l">${img("plant0", () => A.plantSVG(0))}</div>
       <div class="plant plant-r">${img("plant1", () => A.plantSVG(1))}</div>
+      <div class="boss-wrap">
+      <div class="boss-rug"></div>
       <button class="seat boss" data-seat="boss" aria-label="${esc(b.name)} · ${esc(b.title)}">
         <span class="bubble" data-bubble="boss" hidden></span>
         <div class="seat-art">${img("boss", () => A.seatSVG({ look: b.look, hired: true, boss: true, prop: "", label: b.title }))}</div>
         <div class="cat">${img("cat", () => A.catSVG())}</div>
         <div class="seat-label boss-label"><span class="role">${esc(b.name)}</span><span class="pill gold">Bàn giám đốc</span></div>
       </button>
+      </div>
+      ${idea ? `<div class="idea-desk">${seatButton(idea)}</div>` : ""}
       <p class="boss-hint">Bấm vào bàn mình để nhắn điều phối</p>
     </section>`;
   }
@@ -127,7 +131,7 @@ window.OfficeApp = { start: function (api) {
 
     const all = Object.values(seats);
     $("#stat-staff").textContent = all.length;
-    $("#stat-open").textContent = D.teams.length;
+    $("#stat-open").textContent = D.teams.filter((t) => !t.center).length;
     $("#brand-name").textContent = D.studio;
     renderBubbles();
   }

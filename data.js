@@ -83,6 +83,16 @@ window.OFFICE_DATA = {
         "Rà lại âm lượng các hiệu ứng cho đều nhau."
       ]
     },
+    idea: {
+      label: "Idea maker",
+      desc: "Nghĩ ý tưởng game mới, tính năng mới, cách tăng doanh thu và marketing cho cả studio.",
+      shirt: "#fab005", prop: "pencils",
+      templates: [
+        "Đề xuất 5 ý tưởng game mới đang trend, có thể làm nhanh.",
+        "Ý tưởng tính năng mới cho ",
+        "Ý tưởng tăng doanh thu quảng cáo cho các game đang có."
+      ]
+    },
     qa: {
       label: "QA",
       desc: "Chơi thử, tìm lỗi và kiểm tra lỗi đã sửa.",
@@ -151,6 +161,12 @@ window.OFFICE_DATA = {
       id: "paperroll", appIcon: true, name: "Paper Roll", game: "Lazy Cat", project: "Paper Roll: Lazy Cat",
       color: "#63e6be", icon: "star",
       seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
+    },
+    {
+      // Sits in the centre, right under the CEO desk (not a team zone).
+      id: "idea", center: true, name: "Idea maker", game: "Ý tưởng", project: "Cả studio",
+      color: "#ffd43b", icon: "star",
+      seats: [ { role: "idea" } ]
     },
     {
       id: "chung", name: "Chung", game: "Dùng chung", project: "Cả 7 game",

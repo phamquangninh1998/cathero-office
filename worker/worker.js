@@ -30,6 +30,7 @@ const TEAMS = {
   moe: { name: "Moe Family", game: "Moe Family Only Up", folder: path.join(HOME, "Documents", "GitHub", "MoeFamily") },
   paperroll: { name: "Paper Roll", game: "Paper Roll: Lazy Cat", folder: path.join(ROOT, "Paper-roll-Lazy-Cat") },
   chung: { name: "Chung", game: "cả 7 game", folder: null },
+  idea: { name: "Idea maker", game: "cả studio", folder: null },
   ceo: { name: "Bàn CEO", game: "cả studio", folder: null }
 };
 const GAME_FOLDERS = Object.values(TEAMS).map((t) => t.folder).filter(Boolean);
@@ -174,7 +175,7 @@ function officeSeats() {
   const sandbox = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.join(ROOT, "CatHeroOffice", "data.js"), "utf8"), sandbox);
   const D = sandbox.window.OFFICE_DATA;
-  return D.teams.flatMap((t) => t.seats.map((s) => ({ id: `${t.id}-${s.role}`, title: `${D.roles[s.role].label} · ${t.name}`, label: D.roles[s.role].label, team: t.name })));
+  return D.teams.flatMap((t) => t.seats.map((s) => ({ id: `${t.id}-${s.role}`, title: t.center ? D.roles[s.role].label : `${D.roles[s.role].label} · ${t.name}`, label: D.roles[s.role].label, team: t.name })));
 }
 
 // Roster kept live in memory so a send does not wait for a read.
