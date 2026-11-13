@@ -215,20 +215,25 @@
   }
 
   // Orange studio cat that sits on the boss desk.
+  // Black-and-white (tuxedo) studio cat, like the hero of the games.
   function catSVG() {
+    const K = "#24242c", W = "#f8f9fa";
     return `<svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <ellipse cx="30" cy="56" rx="20" ry="3.5" fill="rgba(60,40,20,.16)"/>
-      <path class="tail" d="M44 50 C58 48 58 32 50 30" stroke="#f08c3c" stroke-width="6" fill="none" stroke-linecap="round"/>
-      <path d="M14 56 C12 38 20 30 30 30 C40 30 48 38 46 56 Z" fill="#ffa94d"/>
-      <path d="M22 56 C22 46 38 46 38 56 Z" fill="#ffe8cc"/>
-      <path d="M15 22 L17 6 L27 15 Z" fill="#ffa94d"/><path d="M45 22 L43 6 L33 15 Z" fill="#ffa94d"/>
-      <path d="M18 18 L19 10 L24 15 Z" fill="#ffc9c9"/><path d="M42 18 L41 10 L36 15 Z" fill="#ffc9c9"/>
-      <ellipse cx="30" cy="22" rx="16" ry="13" fill="#ffa94d"/>
-      <path d="M24 11 L26 17 M30 10 V16 M36 11 L34 17" stroke="#e8590c" stroke-width="2" stroke-linecap="round"/>
-      <g class="eyes"><ellipse cx="24" cy="22" rx="2.2" ry="2.8" fill="#2b2b3a"/><ellipse cx="36" cy="22" rx="2.2" ry="2.8" fill="#2b2b3a"/></g>
-      <path d="M28.5 26 L31.5 26 L30 27.6 Z" fill="#e64980"/>
-      <path d="M30 27.6 Q28 30 26 28.6 M30 27.6 Q32 30 34 28.6" stroke="#2b2b3a" stroke-width="1.2" fill="none" stroke-linecap="round"/>
-      <path d="M12 24 H20 M12 28 L20 27 M48 24 H40 M48 28 L40 27" stroke="#fff" stroke-width="1" stroke-linecap="round"/>
+      <path d="M44 50 C58 48 58 32 50 30" stroke="${K}" stroke-width="6" fill="none" stroke-linecap="round"/>
+      <path d="M50 30 C52 29 54 31 53 33" stroke="${W}" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M14 56 C12 38 20 30 30 30 C40 30 48 38 46 56 Z" fill="${K}"/>
+      <path d="M21 56 C20 44 25 37 30 37 C35 37 40 44 39 56 Z" fill="${W}"/>
+      <ellipse cx="22" cy="55" rx="4" ry="2.4" fill="${W}"/><ellipse cx="38" cy="55" rx="4" ry="2.4" fill="${W}"/>
+      <path d="M15 22 L17 6 L27 15 Z" fill="${K}"/><path d="M45 22 L43 6 L33 15 Z" fill="${K}"/>
+      <path d="M18 18 L19 10 L24 15 Z" fill="#ffadc2"/><path d="M42 18 L41 10 L36 15 Z" fill="#ffadc2"/>
+      <ellipse cx="30" cy="22" rx="16" ry="13" fill="${K}"/>
+      <path d="M30 14 C26 20 22 24 22 29 C24 34 36 34 38 29 C38 24 34 20 30 14 Z" fill="${W}"/>
+      <ellipse cx="23.5" cy="21.5" rx="3.2" ry="3.6" fill="#b2f2bb"/><ellipse cx="36.5" cy="21.5" rx="3.2" ry="3.6" fill="#b2f2bb"/>
+      <ellipse cx="23.8" cy="22" rx="1.4" ry="2.6" fill="${K}"/><ellipse cx="36.8" cy="22" rx="1.4" ry="2.6" fill="${K}"/>
+      <path d="M28.5 26 L31.5 26 L30 27.6 Z" fill="#f06595"/>
+      <path d="M30 27.6 Q28 30 26 28.6 M30 27.6 Q32 30 34 28.6" stroke="${K}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+      <path d="M11 24 H19 M11 28 L19 27 M49 24 H41 M49 28 L41 27" stroke="#ced4da" stroke-width="1" stroke-linecap="round"/>
     </svg>`;
   }
 
