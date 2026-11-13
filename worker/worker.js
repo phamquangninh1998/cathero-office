@@ -355,7 +355,8 @@ async function overviewTick() {
     // For desks that wait on Phuong, keep the employee's full latest message so
     // the web can show the real question. Re-read only when that thread changed.
     let reads = 0;
-    const want = Object.entries(out).filter(([, st]) => st.kind === "ask" || st.kind === "run")
+    // Only "Cần bạn" desks need the full message (Phuong removed the "Đang làm gì" detail).
+    const want = Object.entries(out).filter(([, st]) => st.kind === "ask")
       .sort((a, b) => (a[1].kind === "ask" ? 0 : 1) - (b[1].kind === "ask" ? 0 : 1));
     for (const [seat, st] of want) {
       // Working desks refresh every ~2 min even if the summary line stays the same.
