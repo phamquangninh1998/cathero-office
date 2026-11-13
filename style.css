@@ -732,3 +732,18 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
   .panel { max-height: 64vh; max-height: 64dvh; }
   body.panel-open .office { padding-bottom: 66vh; }
 }
+
+/* Cat Hero Island takes the old coffee-corner cell */
+.a-island { grid-area: island; }
+.floor {
+  grid-template-areas:
+    "b1     b2  boss b3        b4"
+    "sports moe boss paperroll island"
+    "chung  chung chung chung  chung";
+}
+@media (max-width: 1200px) {
+  .floor { grid-template-areas: "boss boss" "b1 b2" "b3 b4" "sports moe" "paperroll island" "chung chung"; }
+}
+@media (max-width: 640px) {
+  .floor { grid-template-areas: "boss" "b1" "b2" "b3" "b4" "sports" "moe" "paperroll" "island" "chung"; }
+}

@@ -163,13 +163,18 @@ window.OFFICE_DATA = {
       seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
     },
     {
+      id: "island", appIcon: true, name: "Cat Hero Island", game: "Ý tưởng mới", project: "Cat Hero Island",
+      color: "#38d9a9", icon: "island",
+      seats: [ { role: "developer" }, { role: "designer" }, { role: "artist" } ]
+    },
+    {
       // Sits in the centre, right under the CEO desk (not a team zone).
       id: "idea", center: true, name: "Idea maker", game: "Ý tưởng", project: "Cả studio",
       color: "#ffd43b", icon: "star",
       seats: [ { role: "idea" } ]
     },
     {
-      id: "chung", name: "Chung", game: "Dùng chung", project: "Cả 7 game",
+      id: "chung", name: "Chung", game: "Dùng chung", project: "Cả studio",
       color: "#c3a6ff", icon: "globe", shared: true,
       seats: [
         { role: "marketing" },

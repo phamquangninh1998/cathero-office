@@ -254,6 +254,7 @@
     blaster: `<svg viewBox="0 0 24 24"><path d="M3 9 H17 L21 11 L17 13 H10 L8 19 H5 L6 13 H3 Z" fill="#748ffc" stroke="#4263eb" stroke-width="1.2" stroke-linejoin="round"/><circle cx="22" cy="11" r="1.6" fill="#ff6b6b"/></svg>`,
     parachute: `<svg viewBox="0 0 24 24"><path d="M3 11 C3 4 21 4 21 11 Z" fill="#69db7c" stroke="#2f9e44" stroke-width="1.2"/><path d="M3 11 L12 19 L21 11 M9 11 L12 19 L15 11" stroke="#2f9e44" stroke-width="1" fill="none"/><circle cx="12" cy="20" r="2.4" fill="#ffa94d"/></svg>`,
     star: `<svg viewBox="0 0 24 24"><path d="M12 2.5 L14.8 8.6 L21.4 9.3 L16.4 13.8 L17.8 20.4 L12 17 L6.2 20.4 L7.6 13.8 L2.6 9.3 L9.2 8.6 Z" fill="#ffd43b" stroke="#f08c00" stroke-width="1.2" stroke-linejoin="round"/></svg>`,
+    island: `<svg viewBox="0 0 24 24"><ellipse cx="12" cy="19" rx="10" ry="3" fill="#74c0fc"/><path d="M5 18 C6 14 18 14 19 18 Z" fill="#ffd8a8"/><path d="M12 17 C12 12 13 9 15 6" stroke="#8d6e63" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="M15 6 C12 4 9 5 8 7 C10 6 12 6 15 6 Z M15 6 C17 3 20 4 21 6 C19 5 17 5.5 15 6 Z M15 6 C16 8 16 10 15 12 C14.5 10 14.6 8 15 6 Z" fill="#40c057"/></svg>`,
     globe: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#91a7ff" stroke="#4c6ef5" stroke-width="1.2"/><path d="M7 7 C10 8 9 11 7 12 C5 13 6 16 8 17 M15 5 C14 8 17 9 18 11 C19 14 16 15 15 18" stroke="#2f9e44" stroke-width="2.2" fill="none" stroke-linecap="round"/></svg>`
   };
 

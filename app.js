@@ -73,7 +73,7 @@ window.OfficeApp = { start: function (api) {
     return `<section class="zone ${team.shared ? "shared" : ""}" style="--zc:${team.color}" data-zone="${team.id}">
       ${team.appIcon && (api.icons || {})[team.id] ? `<img class="zone-app" src="${(api.icons || {})[team.id]}" alt="${esc(team.project)}">` : ""}
       <header class="zone-sign" data-team="${team.id}">
-        ${team.appIcon ? "" : `<span class="zone-icon">${A.ICONS[team.icon] || ""}</span>`}
+        ${team.appIcon && (api.icons || {})[team.id] ? "" : `<span class="zone-icon">${A.ICONS[team.icon] || ""}</span>`}
         <span class="zone-text"><b>${esc(team.name)} · ${esc(team.game)}</b><small>${esc(team.project)}</small></span>
       </header>
       <div class="desks">${list.map(seatButton).join("")}</div>
@@ -126,7 +126,7 @@ window.OfficeApp = { start: function (api) {
        <div class="area a-sports">${zone(byId.sports)}</div>
        <div class="area a-moe">${zone(byId.moe)}</div>
        <div class="area a-paperroll">${zone(byId.paperroll)}</div>
-       <div class="area a-lounge">${lounge()}</div>
+       <div class="area a-island">${zone(byId.island)}</div>
        <div class="area a-chung">${zone(byId.chung)}</div>`;
 
     const all = Object.values(seats);

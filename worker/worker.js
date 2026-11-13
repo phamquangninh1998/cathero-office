@@ -31,6 +31,7 @@ const TEAMS = {
   paperroll: { name: "Paper Roll", game: "Paper Roll: Lazy Cat", folder: path.join(ROOT, "Paper-roll-Lazy-Cat") },
   chung: { name: "Chung", game: "cả 7 game", folder: null },
   idea: { name: "Idea maker", game: "cả studio", folder: null },
+  island: { name: "Cat Hero Island", game: "Cat Hero Island", folder: null },
   ceo: { name: "Bàn CEO", game: "cả studio", folder: null }
 };
 const GAME_FOLDERS = Object.values(TEAMS).map((t) => t.folder).filter(Boolean);
@@ -385,6 +386,31 @@ async function overviewTick() {
 }
 setInterval(overviewTick, 50000);
 setTimeout(overviewTick, 5000);
+
+// ---------- team app icons that appear later (Cat Hero Island) ----------
+const ICON_DIRS = { island: path.join(HOME, "GameDocs", "CatHeroIsland", "art") };
+const iconSeen = {};
+async function iconTick() {
+  for (const [team, dir] of Object.entries(ICON_DIRS)) {
+    let files = [];
+    try { files = fs.readdirSync(dir).filter((f) => /icon/i.test(f) && /\.(png|jpe?g)$/i.test(f)); } catch { continue; }
+    if (!files.length) continue;
+    const pick = files.map((f) => ({ f, m: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => (/app.?icon/i.test(b.f) - /app.?icon/i.test(a.f)) || (b.m - a.m))[0];
+    const key = `${pick.f}|${pick.m}`;
+    if (iconSeen[team] === key) continue;
+    const out = path.join(os.tmpdir(), `office-icon-${team}.png`);
+    try {
+      await new Promise((res, rej) => execFile("/usr/bin/sips", ["-s", "format", "png", "-Z", "128", path.join(dir, pick.f), "--out", out], (e) => e ? rej(e) : res()));
+      const data = "data:image/png;base64," + fs.readFileSync(out).toString("base64");
+      await db.collection("office").doc("icons").set({ [team]: data }, { merge: true });
+      iconSeen[team] = key;
+      log("team icon updated", team, pick.f);
+    } catch (e) { log("icon update failed", team, e.message); }
+  }
+}
+setInterval(iconTick, 10 * 60 * 1000);
+setTimeout(iconTick, 15000);
 
 // Close the warm tab after 10 idle minutes (nothing sending or being watched).
 let idleTimer = null;
