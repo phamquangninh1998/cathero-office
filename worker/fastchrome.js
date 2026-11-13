@@ -335,7 +335,9 @@ export async function latestReply(url) {
       const feed = [...document.querySelectorAll('[role=feed]')].find(f => f.getBoundingClientRect().x > window.innerWidth * 0.45);
       if (!feed) return null;
       const rows = [...feed.querySelectorAll('[data-testid=transcript-row]')].filter(r => /^Claude responded/i.test((r.querySelector('h3') || {}).textContent || ""));
-      const last = rows[rows.length - 1];
+      // Rows are virtualized, so DOM order is not time order: take the newest by timestamp.
+      const at = (r) => { const t = r.querySelector('time[datetime]'); return t ? Date.parse(t.getAttribute('datetime')) : 0; };
+      const last = rows.slice().sort((a, b) => at(a) - at(b)).pop();
       if (!last) return null;
       const body = last.querySelector('[data-cds=Prose]');
       const t = last.querySelector('time[datetime]');
@@ -348,3 +350,40 @@ export async function latestReply(url) {
 }
 
 export async function backToOverview() { await showOverview(); }
+
+// What a busy employee is doing now: the newest few rows of its thread (replies,
+// checklists, relayed tasks), newest last, by timestamp.
+function cleanActivity(t) {
+  return String(t || "").replace(/[\u00a0\u200b-\u200f\u2060\ufeff\ue000-\uf8ff]/g, " ")
+    .split("\n").map((l) => l.trim()).filter(Boolean).join("\n")
+    .replace(/^(New|Today|Yesterday|now|just now|\d+\s*[smhd]\s*ago|\d{1,2}:\d{2}\s*(AM|PM)?|Show \d+ more)$/gim, "")
+    .replace(/^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,.*$/gm, "")
+    .replace(/^in progress$/gim, "Đang làm:").replace(/^not done$/gim, "Chưa làm:").replace(/^(done|completed)$/gim, "Xong:")
+    .replace(/(Đang làm:|Chưa làm:|Xong:)\s*\n+/g, "$1 ")
+    .replace(/\n{2,}/g, "\n").trim();
+}
+
+export async function recentActivity(url) {
+  await openThreadInPlace(url);
+  for (let k = 0; k < 30; k++) {
+    const raw = await js(`JSON.stringify((() => {
+      const feed = [...document.querySelectorAll('[role=feed]')].find(f => f.getBoundingClientRect().x > window.innerWidth * 0.45);
+      if (!feed) return null;
+      return [...feed.querySelectorAll('[data-testid=transcript-row]')]
+        .filter(r => !r.querySelector('[data-testid=working-activity-row]'))
+        .map(r => {
+          const h = ((r.querySelector('h3') || {}).textContent || "");
+          const body = r.querySelector('[data-cds=Prose]');
+          return { you: /^You said/i.test(h) || /^You\\n/.test(r.innerText || ""), text: ((body ? body.innerText : r.innerText) || "") };
+        });
+    })())`).catch(() => null);
+    if (Array.isArray(raw)) {
+      // Newest rows are rendered at the bottom: keep replies and progress checklists.
+      const items = raw.filter((x) => !x.you).map((x) => cleanActivity(x.text))
+        .filter((t) => t.length > 12 && !/^(\d+ messages? from coordinator|From coordinator)$/i.test(t));
+      if (items.length) return { text: items.slice(-3).map((t) => t.slice(0, 1500)).join("\n\n---\n\n").slice(0, 4000) };
+    }
+    await sleep(200);
+  }
+  return null;
+}

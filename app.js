@@ -265,7 +265,7 @@ window.OfficeApp = { start: function (api) {
     const ts = current && current.kind === "seat" ? threadStates[current.seat.id] : null;
     box.hidden = !ts;
     if (ts) box.innerHTML = `<b>Trên claude.ai:</b> <span class="ts-label ${ts.kind}">${esc(ts.label)}</span> ${esc(ts.summary || "")}${ts.ago ? ` <time>${esc(ts.ago)}</time>` : ""}`
-      + (ts.detail ? `<div class="ts-detail j-report">${md(ts.detail)}</div>${ts.kind === "ask" ? `<span class="ts-hint">Trả lời bằng ô Lệnh bên dưới, tin sẽ vào thẳng thread này.</span>` : ""}` : "");
+      + (ts.detail ? `<span class="ts-sub">${ts.kind === "run" ? "Đang làm gì (tin mới nhất trong thread):" : ts.kind === "ask" ? "Nhân viên đang hỏi:" : "Tin mới nhất:"}</span><div class="ts-detail j-report">${md(ts.detail)}</div>${ts.kind === "ask" ? `<span class="ts-hint">Trả lời bằng ô Lệnh bên dưới, tin sẽ vào thẳng thread này.</span>` : ""}` : "");
   }
 
   function closePanel() {
@@ -452,7 +452,7 @@ window.OfficeApp = { start: function (api) {
     sent: ["Đã gửi, chờ trả lời", "wait"],
     send_failed: ["Lỗi gửi", "err"],
     replying: ["Đang làm", "run"],
-    delegated: ["Đã giao việc", "run"],
+    delegated: ["Đang làm", "run"],
     needs_you: ["Cần bạn", "ask"],
     sent_reply: ["Đã gửi trả lời", "ok"],
     done: ["Xong", "ok"],
@@ -639,10 +639,7 @@ window.OfficeApp = { start: function (api) {
     const active = ACTIVE.includes(j.status);
     const progress = (j.progress || []).slice(-5);
     let body = "";
-    if (j.seatId === "boss") {
-      const kids = childrenOf(j.id);
-      if (kids.length) body += `<div class="routed"><b>Đã giao cho:</b> ${routeChips(kids)}</div>`;
-    } else if (j.createdBy === "ceo-assistant" || j.batchId) {
+    if (j.createdBy === "ceo-assistant" || j.batchId) {
       body += `<p class="j-from">Người giao: <b>${esc(fromLabel(j))}</b></p>`;
     }
     if (j.status === "waiting" && j.note) body += `<p class="j-note">${esc(j.note)}</p>`;
@@ -650,11 +647,6 @@ window.OfficeApp = { start: function (api) {
       body += progress.length
         ? `<ul class="j-progress">${progress.map((p) => `<li>${esc(p.text)}</li>`).join("")}</ul>`
         : `<p class="j-note">Đang khởi động…</p>`;
-    }
-    if (j.delegatedTo) {
-      body += `<div class="routed"><b>Đã giao cho:</b> ${j.delegatedSeat
-        ? `<button class="route-chip ${kind}" data-open-seat="${j.delegatedSeat}" data-open-job="${j.id}">${esc(j.delegatedTo)}</button>`
-        : `<span class="route-chip">${esc(j.delegatedTo)}</span>`}</div>`;
     }
     if (j.note && j.status !== "waiting") body += `<p class="j-note">${esc(j.note)}</p>`;
     if (j.status === "needs_you" && j.ask) body += `<div class="j-ask"><b>Cần bạn:</b> ${md(j.ask)}</div>`;
@@ -800,7 +792,7 @@ window.OfficeApp = { start: function (api) {
             <time>${esc(fmtTime(tsMs(j.createdAt)))}${j.finishedAt ? " · " + dur(j.startedAt || j.createdAt, j.finishedAt) : ""}</time>
           </summary>
           <div class="j-body">
-            ${kids.length ? `<div class="routed"><b>Đã giao cho:</b> ${routeChips(kids)}</div>` : ""}
+
             ${j.report ? `<div class="j-report">${md(j.report)}</div>` : j.status === "running" && (j.progress || []).length ? `<p class="j-note">${esc(j.progress[j.progress.length - 1].text)}</p>` : j.note ? `<p class="j-note">${esc(j.note)}</p>` : ""}
             ${j.error ? `<p class="j-note err">${esc(j.error)}</p>` : ""}
           </div>

@@ -281,7 +281,7 @@ async function watchTick() {
       if (!delegated.url) {
         // Thread not found in the Threads list: show the handoff as the result instead of a stale "working".
         Object.assign(upd, { status: "done", followUrl: "none", watchNext: FieldValue.delete(), finishedAt: FieldValue.serverTimestamp(),
-          report: `Đã giao cho: ${delegated.title}.` + (conv.rows.length ? "\n\n" + conv.rows.map((r) => r.text).join("\n\n").slice(0, 4000) : ""),
+          report: conv.rows.length ? conv.rows.map((r) => r.text).join("\n\n").slice(0, 4000) : "Điều phối đã chuyển việc cho thread khác.",
           note: "Xem tiếp trong thread đó trên claude.ai." });
       }
       log("delegated", d.id, delegated.title);
@@ -355,14 +355,17 @@ async function overviewTick() {
     // For desks that wait on Phuong, keep the employee's full latest message so
     // the web can show the real question. Re-read only when that thread changed.
     let reads = 0;
-    for (const [seat, st] of Object.entries(out)) {
-      if (st.kind !== "ask") continue;
-      const sig = `${st.summary}|${st.ago}`;
+    const want = Object.entries(out).filter(([, st]) => st.kind === "ask" || st.kind === "run")
+      .sort((a, b) => (a[1].kind === "ask" ? 0 : 1) - (b[1].kind === "ask" ? 0 : 1));
+    for (const [seat, st] of want) {
+      // Working desks refresh every ~2 min even if the summary line stays the same.
+      const sig = `${st.kind}|${st.summary}|${st.ago}` + (st.kind === "run" ? `|${Math.floor(Date.now() / 120000)}` : "");
       const cached = detailCache.get(seat);
       if (cached && cached.sig === sig) { st.detail = cached.detail; continue; }
       if (reads >= 4) { if (cached) st.detail = cached.detail; continue; }
       reads++;
-      const latest = await fast.latestReply(`${PROJECT_URL}?thread=${threads[seat]}`).catch(() => null);
+      const turl = `${PROJECT_URL}?thread=${threads[seat]}`;
+      const latest = st.kind === "run" ? await fast.recentActivity(turl).catch(() => null) : await fast.latestReply(turl).catch(() => null);
       if (latest) { detailCache.set(seat, { sig, detail: latest.text }); st.detail = latest.text; }
     }
     if (reads) await fast.backToOverview().catch(() => {});

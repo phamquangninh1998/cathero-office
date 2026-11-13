@@ -710,3 +710,5 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 .idea-desk .seat { flex: none; width: calc(var(--seat) * 1.05); background: rgba(255,255,255,.55); border: 1.5px solid #ffe066; }
 .idea-desk .seat-label .role { color: #8a5a00; }
 @media (max-width: 640px) { .idea-desk .seat { width: 120px; } }
+.ts-sub { display: block; margin-top: 8px; font-size: 12.5px; font-weight: 800; color: #5c5468; }
+.p-tstate:has(.ts-label.run) { background: #eef2ff; border: 1.5px solid #bac8ff; }
