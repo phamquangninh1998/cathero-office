@@ -1,0 +1,8 @@
+{
+  "name": "cathero-office-worker",
+  "private": true,
+  "type": "module",
+  "description": "Runs commands queued from the Cat Hero Studio office page with headless Claude Code on the Mac mini.",
+  "scripts": { "start": "node worker.js" },
+  "dependencies": { "firebase-admin": "^12.7.0" }
+}

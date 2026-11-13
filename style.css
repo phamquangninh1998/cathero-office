@@ -361,3 +361,62 @@ body[data-auth="denied"] .gate-denied { display: block; }
 .gate-error { color: #d9480f !important; margin: 14px 0 0 !important; font-size: 14px !important; min-height: 1em; }
 .user-chip { font-size: 13.5px; padding: 8px 12px; }
 @media (max-width: 640px) { .user-chip #user-email { display: none; } }
+
+/* ---------------- jobs ---------------- */
+.stat.worker { display: inline-flex; align-items: center; gap: 7px; }
+.stat.worker i { width: 9px; height: 9px; border-radius: 50%; background: #adb5bd; }
+.stat.worker.on i { background: #40c057; box-shadow: 0 0 0 3px rgba(64,192,87,.2); }
+.stat.worker.off { color: var(--muted); }
+
+.bubble {
+  position: absolute; top: -4px; left: 50%; transform: translateX(-50%); z-index: 2;
+  min-width: 30px; height: 26px; padding: 0 8px; border-radius: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  background: #fff; font-weight: 800; font-size: 14px; line-height: 1; box-shadow: 0 3px 0 rgba(0,0,0,.1), 0 4px 10px rgba(0,0,0,.08);
+  animation: bubble-in .3s cubic-bezier(.3,1.6,.6,1);
+}
+.bubble::after { content: ""; position: absolute; bottom: -5px; left: 50%; margin-left: -5px; border: 5px solid transparent; border-top-color: #fff; border-bottom: 0; }
+.bubble[hidden] { display: none; }
+.bubble i { width: 5px; height: 5px; border-radius: 50%; background: #4c6ef5; animation: dots 1s infinite ease-in-out; }
+.bubble i:nth-child(2) { animation-delay: .15s; } .bubble i:nth-child(3) { animation-delay: .3s; }
+.bubble.ok { background: #d3f9d8; color: #2b8a3e; } .bubble.ok::after { border-top-color: #d3f9d8; }
+.bubble.ask { background: #fff3bf; color: #e67700; } .bubble.ask::after { border-top-color: #fff3bf; }
+.bubble.err { background: #ffe3e3; color: #e03131; } .bubble.err::after { border-top-color: #ffe3e3; }
+.bubble.wait { font-size: 13px; }
+@keyframes dots { 0%, 80%, 100% { transform: translateY(0); opacity: .5; } 40% { transform: translateY(-4px); opacity: 1; } }
+@keyframes bubble-in { from { transform: translateX(-50%) scale(.4); } to { transform: translateX(-50%) scale(1); } }
+
+.panel .only-direct { display: none; }
+.panel.direct .only-direct { display: block; }
+.panel.direct .only-copy { display: none; }
+
+.jobs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.job details { background: #fff; border-radius: 14px; box-shadow: inset 0 0 0 1.5px #eadfce; }
+.job.run details { box-shadow: inset 0 0 0 2px #91a7ff; }
+.job.ask details { box-shadow: inset 0 0 0 2px #ffd43b; }
+.job summary { list-style: none; cursor: pointer; padding: 9px 11px; display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: center; }
+.job summary::-webkit-details-marker { display: none; }
+.j-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 800; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+.j-chip.wait { background: #f1f3f5; color: #495057; }
+.j-chip.run { background: #dbe4ff; color: #3b5bdb; }
+.j-chip.ok { background: #d3f9d8; color: #2b8a3e; }
+.j-chip.ask { background: #fff3bf; color: #b35c00; }
+.j-chip.err { background: #ffe3e3; color: #c92a2a; }
+.j-chip.off { background: #f1f3f5; color: #868e96; }
+.spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.j-cmd { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job summary time { grid-column: 1 / -1; font-size: 12px; color: var(--muted); font-weight: 600; }
+.j-body { padding: 0 12px 12px; font-size: 14px; line-height: 1.5; }
+.j-body:empty { display: none; }
+.j-note { margin: 0 0 8px; color: var(--muted); font-weight: 600; font-size: 13.5px; }
+.j-note.err { color: #c92a2a; }
+.j-progress { margin: 0 0 8px; padding: 8px 10px 8px 26px; background: #f8f9ff; border-radius: 10px; font-size: 13px; color: #495057; }
+.j-progress li { margin: 2px 0; }
+.j-progress li:last-child { color: var(--ink); font-weight: 700; }
+.j-report { background: #fbf8f2; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.j-report p { margin: 0 0 6px; } .j-report p:last-child { margin-bottom: 0; }
+.j-report ul { margin: 0 0 6px; padding-left: 20px; }
+.j-report h4 { margin: 8px 0 4px; font-size: 14.5px; }
+.j-report code { background: #f1ece2; border-radius: 5px; padding: 0 4px; font-size: 12.5px; }
+.j-report a { color: #1971c2; }
+#p-send:disabled { opacity: .6; cursor: wait; }

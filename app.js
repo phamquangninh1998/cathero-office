@@ -52,6 +52,7 @@ window.OfficeApp = { start: function (api) {
   function seatButton(s) {
     const hired = !!s.thread;
     return `<button class="seat ${hired ? "hired" : "hiring"}" data-seat="${s.id}" aria-label="${esc(s.title)}${hired ? "" : " (đang tuyển)"}">
+      <span class="bubble" data-bubble="${s.id}" hidden></span>
       <div class="seat-art">${A.seatSVG({ look: s.look, prop: s.role.prop, hired })}</div>
       <div class="seat-label">
         <span class="role">${esc(s.role.label)}</span>
@@ -157,6 +158,9 @@ window.OfficeApp = { start: function (api) {
     open.href = target.url;
     open.textContent = isBoss ? "Mở project chat ↗" : hired ? "Mở thread ↗" : "Mở project chat ↗";
     $("#p-target").textContent = target.label;
+    const direct = canRunJob(cur);
+    panel.classList.toggle("direct", direct);
+    $("#p-send").firstChild.textContent = direct ? "Giao việc " : "Copy & mở ";
 
     $("#p-chips").innerHTML = templatesFor(cur)
       .map((t, i) => `<button class="chip" data-i="${i}">${esc(t.replace(/[: ]+$/, ""))}${/[: ]$/.test(t) ? "…" : ""}</button>`)
@@ -175,6 +179,8 @@ window.OfficeApp = { start: function (api) {
     }
 
     renderHistory();
+    renderPanelJobs();
+    markSeen(cur);
     document.body.classList.add("panel-open");
     panel.setAttribute("aria-hidden", "false");
     setTimeout(() => $("#p-cmd").focus(), 220);
@@ -226,6 +232,7 @@ window.OfficeApp = { start: function (api) {
     if (!current) return;
     const text = $("#p-cmd").value.trim();
     if (!text) { shake($("#p-cmd")); $("#p-cmd").focus(); return; }
+    if (canRunJob(current)) return sendJob(text);
     const target = targetFor(current);
     const ok = await copyText(text);
 
@@ -329,6 +336,182 @@ window.OfficeApp = { start: function (api) {
     if (v.trim()) drafts[historyKey()] = v; else delete drafts[historyKey()];
     store.set("drafts", drafts);
   }
+
+
+  // ---------- jobs: commands run by the Mac mini worker ----------
+  // Hired seats get a direct "Giao việc": the command goes into the Firestore
+  // queue, the worker on the Mac runs it and writes progress + a report back.
+  let jobs = [];
+  let worker = null;
+  const STATUS = {
+    queued: ["Đang chờ máy nhận", "wait"],
+    waiting: ["Chờ thư mục rảnh", "wait"],
+    running: ["Đang làm", "run"],
+    done: ["Xong", "ok"],
+    needs_confirm: ["Cần bạn xác nhận", "ask"],
+    error: ["Lỗi", "err"],
+    cancelled: ["Đã huỷ", "off"]
+  };
+  const ACTIVE = ["queued", "waiting", "running"];
+
+  function canRunJob(cur) { return cur.kind === "seat" && !!cur.seat.thread; }
+
+  function tsMs(t) { return t ? (t.toMillis ? t.toMillis() : +t) : Date.now(); }
+
+  async function sendJob(text) {
+    const s = current.seat;
+    const btn = $("#p-send");
+    btn.disabled = true;
+    try {
+      await api.createJob({ seatId: s.id, title: s.title, role: s.roleKey, team: s.team.id, command: text });
+      const all = api.history;
+      all[s.id] = [{ text, at: Date.now() }].concat((all[s.id] || []).filter((h) => h.text !== text)).slice(0, 12);
+      api.saveHistory(s.id, all[s.id]).catch(() => {});
+      const drafts = store.get("drafts", {}); delete drafts[s.id]; store.set("drafts", drafts);
+      $("#p-cmd").value = "";
+      renderHistory();
+      toast(workerOnline() ? "Đã giao việc. Báo cáo sẽ hiện ngay trong bảng này." : "Đã xếp hàng. Mac mini đang offline, máy bật lại sẽ tự làm.");
+    } catch (e) {
+      toast("Không gửi được: " + (e.code || e.message));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function workerOnline() {
+    return !!(worker && worker.lastSeen && Date.now() - tsMs(worker.lastSeen) < 150000);
+  }
+
+  function renderWorker() {
+    const chip = $("#worker-chip");
+    if (!chip) return;
+    const on = workerOnline();
+    const busy = jobs.filter((j) => j.status === "running").length;
+    chip.className = "stat worker " + (on ? "on" : "off");
+    chip.innerHTML = `<i></i>${on ? (busy ? `Mac mini đang làm ${busy} việc` : "Mac mini sẵn sàng") : "Mac mini offline"}`;
+  }
+
+  function seatJobs(seatId) { return jobs.filter((j) => j.seatId === seatId); }
+
+  function seenKey(seatId) { return "seen." + seatId; }
+  function markSeen(cur) {
+    if (cur.kind !== "seat") return;
+    const latest = seatJobs(cur.seat.id)[0];
+    if (latest && latest.finishedAt) store.set(seenKey(cur.seat.id), tsMs(latest.finishedAt));
+    renderBubbles();
+  }
+
+  function renderBubbles() {
+    document.querySelectorAll("[data-bubble]").forEach((el) => {
+      const id = el.getAttribute("data-bubble");
+      const list = seatJobs(id);
+      const active = list.find((j) => ACTIVE.includes(j.status));
+      const latest = list[0];
+      let kind = "", label = "";
+      if (active) {
+        kind = active.status === "running" ? "run" : "wait";
+        label = active.status === "running" ? "" : "⏳";
+      } else if (latest && latest.finishedAt && tsMs(latest.finishedAt) > store.get(seenKey(id), 0)) {
+        const k = (STATUS[latest.status] || [])[1];
+        kind = k === "ok" ? "ok" : k === "ask" ? "ask" : k === "err" ? "err" : "";
+        label = kind === "ok" ? "✓" : kind === "ask" ? "?" : kind === "err" ? "!" : "";
+      }
+      el.hidden = !kind;
+      el.className = "bubble " + kind;
+      el.innerHTML = kind === "run" ? "<i></i><i></i><i></i>" : label;
+      el.title = kind ? (active ? STATUS[active.status][0] : STATUS[latest.status][0]) : "";
+    });
+  }
+
+  // Tiny, safe markdown: escape first, then bold/code/links/lists/headings.
+  function md(src) {
+    const lines = esc(src || "").split("\n");
+    let html = "", inList = false;
+    const inline = (t) => t
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
+      .replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    for (const raw of lines) {
+      const li = raw.match(/^\s*(?:[-*•]|\d+\.)\s+(.*)$/);
+      if (li) { if (!inList) { html += "<ul>"; inList = true; } html += `<li>${inline(li[1])}</li>`; continue; }
+      if (inList) { html += "</ul>"; inList = false; }
+      const h = raw.match(/^#{1,4}\s+(.*)$/);
+      if (h) html += `<h4>${inline(h[1])}</h4>`;
+      else if (raw.trim()) html += `<p>${inline(raw)}</p>`;
+    }
+    if (inList) html += "</ul>";
+    return html;
+  }
+
+  function ago(ms) {
+    const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 60) return `${s} giây trước`;
+    if (s < 3600) return `${Math.round(s / 60)} phút trước`;
+    return fmtTime(ms);
+  }
+
+  function dur(a, b) {
+    const s = Math.round((tsMs(b) - tsMs(a)) / 1000);
+    return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+  }
+
+  function jobCard(j, open) {
+    const [label, kind] = STATUS[j.status] || [j.status, "off"];
+    const active = ACTIVE.includes(j.status);
+    const progress = (j.progress || []).slice(-5);
+    let body = "";
+    if (j.status === "waiting" && j.note) body += `<p class="j-note">${esc(j.note)}</p>`;
+    if (j.status === "running") {
+      body += progress.length
+        ? `<ul class="j-progress">${progress.map((p) => `<li>${esc(p.text)}</li>`).join("")}</ul>`
+        : `<p class="j-note">Đang khởi động…</p>`;
+    }
+    if (j.report) body += `<div class="j-report">${md(j.report)}</div>`;
+    if (j.status === "error" && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
+    const when = j.finishedAt ? `${ago(tsMs(j.finishedAt))} · ${dur(j.startedAt || j.createdAt, j.finishedAt)}`
+      : j.startedAt ? `bắt đầu ${ago(tsMs(j.startedAt))}` : ago(tsMs(j.createdAt));
+    return `<li class="job ${kind}">
+      <details ${open ? "open" : ""}>
+        <summary>
+          <span class="j-chip ${kind}">${kind === "run" ? '<i class="spin"></i>' : ""}${label}</span>
+          <span class="j-cmd">${esc(j.command)}</span>
+          <time>${esc(when)}</time>
+        </summary>
+        <div class="j-body">${body}
+          ${active ? `<button class="btn small ghost j-cancel" data-job="${j.id}">Huỷ việc này</button>` : ""}
+        </div>
+      </details>
+    </li>`;
+  }
+
+  function renderPanelJobs() {
+    const box = $("#p-jobs");
+    if (!current || !canRunJob(current)) { box.hidden = true; return; }
+    const list = seatJobs(current.seat.id).slice(0, 6);
+    box.hidden = list.length === 0;
+    // keep the user's open/closed choice across live updates
+    const openIds = new Set([...box.querySelectorAll("details[open]")].map((d) => d.closest(".job").dataset.id));
+    const firstRender = !box.dataset.seat || box.dataset.seat !== current.seat.id;
+    box.dataset.seat = current.seat.id;
+    $("#p-jobs-list").innerHTML = list.map((j, i) => jobCard(j, firstRender ? i === 0 : openIds.has(j.id) || (i === 0 && ACTIVE.includes(j.status))))
+      .join("");
+    [...$("#p-jobs-list").children].forEach((li, i) => { li.dataset.id = list[i].id; });
+  }
+
+  api.watchJobs((list) => {
+    jobs = list;
+    renderBubbles();
+    renderWorker();
+    if (current) { renderPanelJobs(); markSeen(current); }
+  });
+  api.watchWorker((w) => { worker = w; renderWorker(); });
+  setInterval(renderWorker, 30000);
+
+  document.addEventListener("click", (e) => {
+    const c = e.target.closest(".j-cancel");
+    if (!c) return;
+    api.cancelJob(c.dataset.job).then(() => toast("Đã yêu cầu huỷ.")).catch((err) => toast("Không huỷ được: " + err.message));
+  });
 
   buildModel();
   render();

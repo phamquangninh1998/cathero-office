@@ -6,7 +6,7 @@ window.OFFICE_DATA = {
   projectUrl: "https://claude.ai/code/project/chan_01KHZZY2Zsyqn7jE4CfbzvCK",
 
   boss: {
-    name: "Phuong",
+    name: "Anh Ninh",
     title: "CEO",
     look: { skin: "#f6cfa8", hair: "#2b2230", hairStyle: "short", shirt: "#e8505b", glasses: true, mug: "#ffd36e" }
   },

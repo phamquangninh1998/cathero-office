@@ -12,5 +12,16 @@ service cloud.firestore {
     match /office/{docId} {
       allow read, write: if allowed();
     }
+    // Commands for the Mac mini worker. The worker uses the Admin SDK, which
+    // bypasses these rules; the browser may only queue, read and cancel.
+    match /jobs/{jobId} {
+      allow read: if allowed();
+      allow create: if allowed()
+        && request.resource.data.status == 'queued'
+        && request.resource.data.command is string
+        && request.resource.data.command.size() < 8000;
+      allow update: if allowed()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancelRequested']);
+    }
   }
 }

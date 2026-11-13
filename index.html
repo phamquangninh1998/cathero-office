@@ -38,6 +38,7 @@
     <div class="stats">
       <span class="stat"><b id="stat-staff">0</b> nhân viên</span>
       <span class="stat"><b id="stat-open">0</b> ghế đang tuyển</span>
+      <span class="stat worker off" id="worker-chip"><i></i>Mac mini…</span>
       <span class="stat clock" id="clock">--:--</span>
       <button class="btn primary" id="btn-coordinator">Nhắn điều phối</button>
       <button class="btn ghost user-chip" id="btn-signout" title="Đăng xuất"><span id="user-email"></span><span aria-hidden="true">⎋</span></button>
@@ -78,7 +79,13 @@
         <button class="btn primary big" id="p-send">Gửi <span class="kbd">⌘↵</span></button>
         <a class="btn ghost" id="p-open" target="_blank" rel="noopener">Mở thread ↗</a>
       </div>
-      <p class="p-note">Gửi tới <b id="p-target"></b>. Lệnh được copy sẵn, sang tab claude.ai bấm vào ô chat, dán (⌘V) rồi Enter.</p>
+      <p class="p-note only-copy">Gửi tới <b id="p-target"></b>. Lệnh được copy sẵn, sang tab claude.ai bấm vào ô chat, dán (⌘V) rồi Enter.</p>
+      <p class="p-note only-direct">Mac mini nhận việc và chạy ngay; tiến độ và báo cáo hiện bên dưới, cứ để bảng này mở mà chờ. Việc cần đưa ra ngoài (nộp store, chạy quảng cáo, đăng bài, gửi Telegram) sẽ dừng lại hỏi bạn.</p>
+    </div>
+
+    <div class="p-section" id="p-jobs" hidden>
+      <span class="p-label">Việc đã giao</span>
+      <ul class="jobs" id="p-jobs-list"></ul>
     </div>
 
     <div class="p-section" id="p-history" hidden>

@@ -4,7 +4,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc }
+import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig, ALLOWED_EMAILS } from "./firebase-config.js";
 
@@ -38,7 +38,20 @@ async function startOffice(user) {
     saveThread: (seatId, threadId) =>
       setDoc(rosterRef, { threads: { [seatId]: threadId || "" } }, { merge: true }),
     saveHistory: (key, list) =>
-      setDoc(historyRef, { seats: { [key]: list || [] } }, { merge: true })
+      setDoc(historyRef, { seats: { [key]: list || [] } }, { merge: true }),
+    // Job queue read by the worker on the Mac mini (worker/worker.js).
+    createJob: (job) => addDoc(collection(db, "jobs"), {
+      ...job, status: "queued", createdAt: serverTimestamp(), createdBy: user.email
+    }),
+    cancelJob: (id) => updateDoc(doc(db, "jobs", id), { cancelRequested: true }),
+    watchJobs: (cb) => onSnapshot(
+      query(collection(db, "jobs"), orderBy("createdAt", "desc"), limit(80)),
+      { includeMetadataChanges: false },
+      (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))),
+      (err) => console.warn("jobs", err)
+    ),
+    watchWorker: (cb) => onSnapshot(doc(db, "office", "worker"),
+      (d) => cb(d.exists() ? d.data() : null), (err) => console.warn("worker", err))
   };
   // Console helper for bulk edits: officeAdmin.setThreads({ "b1-developer": "cmsg_…" })
   window.officeAdmin = {
