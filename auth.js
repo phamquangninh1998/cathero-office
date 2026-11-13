@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, sig
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114q";
+import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114r";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

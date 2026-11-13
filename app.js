@@ -410,8 +410,16 @@ window.OfficeApp = { start: function (api) {
     $("#p-link-save").addEventListener("click", saveLink);
     $("#btn-coordinator").addEventListener("click", () => openPanel({ kind: "boss" }));
     $("#p-cmd").addEventListener("input", saveDraft);
-    $("#p-cmd").addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+    // Enter sends, Shift+Enter is a new line (ignored while a Vietnamese IME is composing).
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+      const t = e.target;
+      if (t && t.id === "p-cmd") { e.preventDefault(); send(); return; }
+      if (t && t.matches && t.matches("[data-reply-for]")) {
+        e.preventDefault();
+        const b = document.querySelector(`[data-reply-send="${t.dataset.replyFor}"]`);
+        if (b) b.click();
+      }
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && current) closePanel(); });
   }

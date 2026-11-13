@@ -15,13 +15,10 @@ import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 const HOME = os.homedir();
 const ROOT = path.join(HOME, "UnityProjects");
 const KEY = process.env.OFFICE_KEY || path.join(HOME, ".config/cathero-office/service-account.json");
-const CLAUDE = process.env.CLAUDE_BIN || "/opt/homebrew/bin/claude";
 const PROJECT_URL = "https://claude.ai/code/project/chan_01KHZZY2Zsyqn7jE4CfbzvCK";
 const MAX_PARALLEL = 2;              // 16 GB RAM: at most two Claude jobs at once
 const JOB_TIMEOUT_MS = 90 * 60 * 1000;
 const BUSY_WINDOW_S = 90;            // a game folder touched this recently counts as busy
-const MODEL = process.env.OFFICE_MODEL || "claude-opus-5-5";
-const EFFORT = process.env.OFFICE_EFFORT || "high";
 
 // Which folder each team works in. Paper-roll-Lazy-Cat is never used.
 const TEAMS = {
@@ -122,101 +119,7 @@ function describeTool(block) {
 }
 
 // ---------- running a job ----------
-async function runJob(ref, job) {
-  const team = TEAMS[job.team];
-  const lock = lockKeyFor(job);
-  locks.add(lock);
-  const sessions = (await sessionsDoc.get()).data() || {};
-  const resumeId = sessions[job.seatId];
-  const sessionId = resumeId || randomUUID();
-
-  // Game teams may only edit their own folder; shared roles may not edit any game.
-  const editDeny = GAME_FOLDERS.filter((f) => f !== team.folder)
-    .flatMap((f) => ["Edit", "Write"].map((t) => `${t}(/${f}/**)`));
-  const settings = JSON.stringify({ permissions: { deny: editDeny } });
-  const args = [
-    "-p", job.command,
-    "--output-format", "stream-json", "--verbose",
-    "--model", MODEL, "--effort", EFFORT,
-    "--permission-mode", "auto", "--permission-prompts", "none",
-    "--append-system-prompt", rolePrompt(job, team),
-    "--settings", settings
-  ];
-  // Folders outside ~/UnityProjects (Moe Family) must be added explicitly.
-  for (const f of team.folder ? [team.folder] : GAME_FOLDERS) if (!f.startsWith(ROOT + path.sep)) args.push("--add-dir", f);
-  if (resumeId) args.push("--resume", resumeId); else args.push("--session-id", sessionId);
-
-  log("run", ref.id, job.title, short(job.command, 80), resumeId ? `(resume ${resumeId})` : "");
-  await ref.update({ status: "running", startedAt: FieldValue.serverTimestamp(), note: FieldValue.delete(), sessionId, progress: [] });
-
-  const child = spawn(CLAUDE, args, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, OFFICE_PARENT_JOB: ref.id, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}` } });
-  running.set(ref.id, { child, lock });
-
-  let progress = [];
-  let dirty = false;
-  let result = null;
-  let lastText = "";
-  let stderr = "";
-  let buf = "";
-  const push = (text) => { progress.push({ t: Date.now(), text }); progress = progress.slice(-30); dirty = true; };
-  const flush = setInterval(() => {
-    if (!dirty) return;
-    dirty = false;
-    ref.update({ progress }).catch((e) => log("progress write failed", e.message));
-  }, 2500);
-  const killer = setTimeout(() => { push("Quá 90 phút, dừng lại."); child.kill("SIGTERM"); }, JOB_TIMEOUT_MS);
-
-  child.stdout.on("data", (chunk) => {
-    buf += chunk;
-    let nl;
-    while ((nl = buf.indexOf("\n")) >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line) continue;
-      let ev;
-      try { ev = JSON.parse(line); } catch { continue; }
-      if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
-        for (const b of ev.message.content) {
-          if (b.type === "text" && b.text.trim()) { lastText = b.text; push(short(b.text)); }
-          if (b.type === "tool_use") push(describeTool(b));
-        }
-      } else if (ev.type === "result") {
-        result = ev;
-      }
-    }
-  });
-  child.stderr.on("data", (d) => { stderr = (stderr + d).slice(-4000); });
-
-  const code = await new Promise((resolve) => child.on("close", resolve));
-  clearInterval(flush);
-  clearTimeout(killer);
-  running.delete(ref.id);
-  locks.delete(lock);
-  if (team.folder) lastOwnFinish.set(team.folder, Date.now());
-
-  const cancelled = (await ref.get()).get("cancelRequested");
-  const report = (result && typeof result.result === "string" && result.result.trim()) || lastText.trim();
-  let status = "done";
-  if (cancelled) status = "cancelled";
-  else if (!result || result.is_error || (code !== 0 && !report)) status = "error";
-  else if (/^\s*\**\s*CẦN XÁC NHẬN/i.test(report)) status = "needs_confirm";
-
-  const update = {
-    status, progress, finishedAt: FieldValue.serverTimestamp(),
-    report: report || "", exitCode: code
-  };
-  if (result) {
-    if (typeof result.total_cost_usd === "number") update.costUsd = result.total_cost_usd;
-    if (result.num_turns) update.turns = result.num_turns;
-    if (result.session_id) update.sessionId = result.session_id;
-  }
-  if (status === "error") update.error = short((result && result.subtype) || stderr || `exit ${code}`, 600);
-  await ref.update(update);
-  const sid = (result && result.session_id) || sessionId;
-  if (status !== "error") await sessionsDoc.set({ [job.seatId]: sid }, { merge: true });
-  log("finished", ref.id, status, code);
-  schedule();
-}
+// (Running Claude locally on the Mac was removed: commands only go into claude.ai.)
 
 // ---------- delivering a command into claude.ai through Chrome ----------
 // Sending and reading go through fastchrome.js (one warm tab in Phuong's Chrome,
@@ -309,11 +212,10 @@ function lastQuestion(text) {
 }
 
 async function watchTick() {
-  if (watching || locks.has("chrome") || pending.some((p) => p.data.mode !== "local")) return;
+  if (watching || locks.has("chrome") || pending.length > 0) return;
   watching = true;
   try {
-    const snap = await jobsCol.where("status", "in", WATCHED).get();
-    const due = snap.docs.filter((d) => !d.get("replyTo") && (d.get("watchNext") || 0) <= Date.now())
+    const due = watchedDocs.filter((d) => !d.get("replyTo") && (d.get("watchNext") || 0) <= Date.now())
       .sort((a, b) => (a.get("watchNext") || 0) - (b.get("watchNext") || 0));
     const d = due[0];
     if (!d) return;
@@ -409,6 +311,9 @@ async function watchTick() {
     watching = false;
   }
 }
+// Watched jobs come from a live listener (no repeated queries, so Firestore reads stay tiny).
+let watchedDocs = [];
+jobsCol.where("status", "in", WATCHED).onSnapshot((snap) => { watchedDocs = snap.docs; }, (e) => log("watch listener error", e.message));
 setInterval(() => { watchTick(); }, 5000);
 
 // ---------- desk status from claude.ai's own thread list ----------
@@ -417,7 +322,7 @@ setInterval(() => { watchTick(); }, 5000);
 const SECTION_LABEL = [[/^Waiting/i, "ask", "Cần bạn"], [/^Working/i, "run", "Đang làm"], [/^Idle/i, "idle", "Rảnh"], [/^Resolved/i, "done", "Xong"]];
 let overviewBusy = false, lastOverview = "";
 async function overviewTick() {
-  if (overviewBusy || watching || locks.has("chrome") || pending.some((p) => p.data.mode !== "local")) return;
+  if (overviewBusy || watching || locks.has("chrome") || pending.length > 0) return;
   overviewBusy = true;
   locks.add("chrome");
   try {
@@ -436,8 +341,6 @@ async function overviewTick() {
     if (key !== lastOverview) {
       lastOverview = key;
       await db.collection("office").doc("threadStates").set({ seats: out, readAt: Timestamp.now() });
-    } else {
-      await db.collection("office").doc("threadStates").set({ readAt: Timestamp.now() }, { merge: true });
     }
   } catch (e) {
     log("overview read failed", e.message);
@@ -481,8 +384,8 @@ async function schedule() {
         await ref.update({ status: "error", error: "Không rõ nhân viên hoặc lệnh trống.", finishedAt: FieldValue.serverTimestamp() });
         continue;
       }
-      // Default path: post the command into claude.ai (one delivery at a time).
-      if (data.mode !== "local") {
+      // Every command is posted into claude.ai (one delivery at a time). No AI runs here.
+      {
         if (locks.has("chrome")) {
           const w = "đang gửi lệnh khác vào claude.ai, xếp hàng chờ";
           if (data.status !== "waiting" || data.note !== w) await ref.update({ status: "waiting", note: w });
@@ -505,33 +408,7 @@ async function schedule() {
           running.delete(ref.id); locks.delete("chrome");
           await ref.update({ status: "error", error: short(e.message, 600), finishedAt: FieldValue.serverTimestamp() }).catch(() => {});
         });
-        continue;
       }
-      const lock = lockKeyFor(data);
-      let wait = null;
-      if (running.size >= MAX_PARALLEL) wait = "Mac mini đang làm 2 việc khác, xếp hàng chờ";
-      else if (locks.has(lock)) wait = "nhân viên cùng thư mục đang làm việc trước, xếp hàng chờ";
-      else wait = await folderBusy(TEAMS[data.team].folder);
-      if (wait) {
-        if (data.status !== "waiting" || data.note !== wait) await ref.update({ status: "waiting", note: wait });
-        continue;
-      }
-      // claim it (another worker instance must not take the same job)
-      const ok = await db.runTransaction(async (tx) => {
-        const snap = await tx.get(ref);
-        if (!snap.exists || !["queued", "waiting"].includes(snap.get("status"))) return false;
-        tx.update(ref, { status: "running", claimedBy: os.hostname() });
-        return true;
-      });
-      if (!ok) continue;
-      const seatThread = ((await db.collection("office").doc("roster").get()).data() || {});
-      const threads = { ...JSON.parse(seatThread.seedJson || "{}"), ...(seatThread.threads || {}) };
-      runJob(ref, { ...data, thread: threads[data.seatId] || "" }).catch(async (e) => {
-        log("job crashed", ref.id, e);
-        running.delete(ref.id);
-        locks.delete(lock);
-        await ref.update({ status: "error", error: short(e.message, 600), finishedAt: FieldValue.serverTimestamp() }).catch(() => {});
-      });
     }
   } catch (e) {
     log("schedule error", e.message);
@@ -590,5 +467,5 @@ for (const sig of ["SIGTERM", "SIGINT"]) {
     process.exit(0);
   });
 }
-log("worker started; model", MODEL, "effort", EFFORT);
+log("worker started (claude.ai delivery only, no AI calls)");
 fast.probe().then((r) => log("chrome control probe:", r));
