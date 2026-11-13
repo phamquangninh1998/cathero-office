@@ -86,7 +86,7 @@ window.OfficeApp = { start: function (api) {
         <div class="cat">${A.catSVG()}</div>
         <div class="seat-label boss-label"><span class="role">${esc(b.name)}</span><span class="pill gold">Bàn giám đốc</span></div>
       </button>
-      <p class="boss-hint">Bấm vào bàn mình để hỏi Trợ lý CEO</p>
+      <p class="boss-hint">Bấm vào bàn mình để nhắn điều phối</p>
     </section>`;
   }
 
@@ -147,8 +147,7 @@ window.OfficeApp = { start: function (api) {
       return [
         "Báo cáo tình hình cả studio hôm nay: team nào đang làm gì, xong gì.",
         "Ai đang bị kẹt và cần mình quyết định gì?",
-        "Tổng hợp báo cáo mới nhất của tất cả nhân viên thành 5 ý chính.",
-        "Chia việc này cho đúng người: "
+        "Chia việc này cho đúng thread: "
       ];
     }
     const s = cur.seat;
@@ -168,14 +167,14 @@ window.OfficeApp = { start: function (api) {
     $("#p-title").textContent = `Cả team ${team.name}`;
     $("#p-sub").textContent = `${members.length} người: ${members.map((m) => m.role.label).join(", ")}`;
     $("#p-desc").textContent = team.shared
-      ? "Lệnh gửi cho từng người trong team; mỗi người làm theo vai trò của mình và báo cáo riêng, có thể chạy song song."
-      : "Lệnh gửi cho từng người trong team; mỗi người làm theo vai trò của mình và báo cáo riêng. Vì chung một thư mục game, họ làm lần lượt (Developer, Designer, Artist) để không giẫm chân nhau.";
+      ? "Cùng một lệnh được gửi vào thread của từng người trong team, lần lượt từng thread. Mỗi người trả lời trong thread của mình."
+      : "Cùng một lệnh được gửi vào thread của Developer, Designer và Artist, lần lượt từng thread. Mỗi người trả lời trong thread của mình.";
     const badge = $("#p-badge");
     badge.textContent = "Nhắn cả team";
     badge.className = "pill gold";
     $("#p-open").hidden = true;
     panel.classList.add("direct");
-    $("#p-send").firstChild.textContent = "Giao cho cả team ";
+    $("#p-send").firstChild.textContent = "Gửi vào thread cả team ";
     $("#p-chips").innerHTML = templatesFor(cur)
       .map((t, i) => `<button class="chip" data-i="${i}">${esc(t.replace(/[: ]+$/, ""))}${/[: ]$/.test(t) ? "…" : ""}</button>`)
       .join("");
@@ -202,14 +201,14 @@ window.OfficeApp = { start: function (api) {
       ? A.seatSVG({ look: D.boss.look, hired: true, boss: true, label: D.boss.title })
       : A.seatSVG({ look: s.look, prop: s.role.prop, hired });
     $("#p-title").textContent = isBoss ? `${D.boss.name} · ${D.boss.title}` : s.title;
-    $("#p-sub").textContent = isBoss ? "Trợ lý CEO trên Mac mini"
+    $("#p-sub").textContent = isBoss ? "Gửi vào project chat (điều phối) trên claude.ai"
       : `${s.team.name} · ${s.team.game}${s.team.shared ? "" : " · " + s.team.project}`;
     $("#p-desc").textContent = isBoss
-      ? "Trợ lý CEO (Opus 5.5, high) đọc toàn bộ dự án và báo cáo của 26 nhân viên, trả lời câu hỏi chung của studio và tự chia việc cho đúng người hoặc đúng team. Kết quả hiện ngay ở đây."
+      ? "Lệnh đi vào project chat, nơi điều phối chia việc cho đúng thread. Trả lời xem trong project chat (nút Mở project chat)."
       : s.role.desc;
 
     const badge = $("#p-badge");
-    badge.textContent = isBoss ? "Trợ lý CEO · Opus 5.5" : "Senior · Opus 5.5";
+    badge.textContent = isBoss ? "Điều phối" : "Senior · Opus 5.5";
     badge.className = "pill " + (isBoss ? "gold" : "on");
 
     const target = targetFor(cur);
@@ -221,7 +220,7 @@ window.OfficeApp = { start: function (api) {
     const direct = canRunJob(cur);
     panel.classList.toggle("direct", direct);
     open.hidden = open.hidden || false;
-    $("#p-send").firstChild.textContent = direct ? "Giao việc " : "Copy & mở ";
+    $("#p-send").firstChild.textContent = isBoss ? "Gửi vào project chat " : "Gửi vào thread ";
 
     $("#p-chips").innerHTML = templatesFor(cur)
       .map((t, i) => `<button class="chip" data-i="${i}">${esc(t.replace(/[: ]+$/, ""))}${/[: ]$/.test(t) ? "…" : ""}</button>`)
@@ -418,12 +417,14 @@ window.OfficeApp = { start: function (api) {
     queued: ["Đang chờ máy nhận", "wait"],
     waiting: ["Chờ thư mục rảnh", "wait"],
     running: ["Đang làm", "run"],
+    sending: ["Đang gửi vào claude.ai", "run"],
+    sent: ["Đã gửi vào thread", "ok"],
     done: ["Xong", "ok"],
     needs_confirm: ["Cần bạn xác nhận", "ask"],
     error: ["Lỗi", "err"],
     cancelled: ["Đã huỷ", "off"]
   };
-  const ACTIVE = ["queued", "waiting", "running"];
+  const ACTIVE = ["queued", "waiting", "running", "sending"];
 
   function canRunJob(cur) { return true; }
 
@@ -438,13 +439,13 @@ window.OfficeApp = { start: function (api) {
         const team = current.team;
         const batchId = `${team.id}-${Date.now().toString(36)}`;
         await Promise.all(teamSeats(team).map((s, order) => api.createJob({
-          seatId: s.id, title: s.title, role: s.roleKey, team: team.id, command: text, batchId, batchOrder: order
+          seatId: s.id, title: s.title, role: s.roleKey, team: team.id, command: text, batchId, batchOrder: order, mode: "thread"
         })));
       } else if (current.kind === "boss") {
-        await api.createJob({ seatId: "boss", title: "Trợ lý CEO", role: "ceo", team: "ceo", command: text });
+        await api.createJob({ seatId: "boss", title: "Project chat (điều phối)", role: "ceo", team: "ceo", command: text, mode: "thread" });
       } else {
         const s = current.seat;
-        await api.createJob({ seatId: s.id, title: s.title, role: s.roleKey, team: s.team.id, command: text });
+        await api.createJob({ seatId: s.id, title: s.title, role: s.roleKey, team: s.team.id, command: text, mode: "thread" });
       }
       const all = api.history;
       all[key] = [{ text, at: Date.now() }].concat((all[key] || []).filter((h) => h.text !== text)).slice(0, 12);
@@ -452,7 +453,7 @@ window.OfficeApp = { start: function (api) {
       const drafts = store.get("drafts", {}); delete drafts[key]; store.set("drafts", drafts);
       $("#p-cmd").value = "";
       renderHistory();
-      toast(workerOnline() ? "Đã giao việc. Báo cáo sẽ hiện ngay trong bảng này." : "Đã xếp hàng. Mac mini đang offline, máy bật lại sẽ tự làm.");
+      toast(workerOnline() ? "Đã xếp hàng. Mac mini sẽ mở Chrome và gửi vào claude.ai ngay." : "Đã xếp hàng. Mac mini đang offline, máy bật lại sẽ tự gửi.");
     } catch (e) {
       toast("Không gửi được: " + (e.code || e.message));
     } finally {
@@ -570,7 +571,7 @@ window.OfficeApp = { start: function (api) {
   }
 
   function seatName(id) {
-    if (id === "boss") return "Trợ lý CEO";
+    if (id === "boss") return "Project chat (điều phối)";
     const s = seats[id];
     return s ? s.title : id;
   }
@@ -597,7 +598,7 @@ window.OfficeApp = { start: function (api) {
     let body = "";
     if (j.seatId === "boss") {
       const kids = childrenOf(j.id);
-      body += `<div class="routed"><b>Đã giao cho:</b> ${kids.length ? routeChips(kids) : `<span class="j-note">${ACTIVE.includes(j.status) ? "chưa giao ai (đang làm)" : "không giao cho ai, Trợ lý tự trả lời"}</span>`}</div>`;
+      if (kids.length) body += `<div class="routed"><b>Đã giao cho:</b> ${routeChips(kids)}</div>`;
     } else if (j.createdBy === "ceo-assistant" || j.batchId) {
       body += `<p class="j-from">Người giao: <b>${esc(fromLabel(j))}</b></p>`;
     }
@@ -608,6 +609,7 @@ window.OfficeApp = { start: function (api) {
         : `<p class="j-note">Đang khởi động…</p>`;
     }
     if (j.report) body += `<div class="j-report">${md(j.report)}</div>`;
+    if (j.status === "sent" && j.targetUrl) body += `<a class="btn small ghost" href="${esc(j.targetUrl)}" target="_blank" rel="noopener">Xem trả lời trong thread ↗</a>`;
     if (j.status === "error" && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
     const when = j.finishedAt ? `${ago(tsMs(j.finishedAt))} · ${dur(j.startedAt || j.createdAt, j.finishedAt)}`
       : j.startedAt ? `bắt đầu ${ago(tsMs(j.startedAt))}` : ago(tsMs(j.createdAt));

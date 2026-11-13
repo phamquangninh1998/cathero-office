@@ -216,6 +216,62 @@ async function runJob(ref, job) {
   schedule();
 }
 
+// ---------- delivering a command into claude.ai through Chrome ----------
+// The page's command is posted, word for word, into the employee's thread (or the
+// project chat for the CEO desk) by a small headless Claude using Claude in Chrome.
+const DELIVER_TEMPLATE = fs.readFileSync(path.join(path.dirname(new URL(import.meta.url).pathname), "deliver-prompt.md"), "utf8");
+const CHROME_DEVICE = process.env.OFFICE_CHROME_DEVICE || "cd9e24d3-e70c-47e6-b029-7cc63d55d04a";
+const DELIVER_MODEL = process.env.OFFICE_DELIVER_MODEL || "claude-sonnet-5-5";
+
+async function runDelivery(ref, job) {
+  locks.add("chrome");
+  const isBoss = job.seatId === "boss";
+  const url = isBoss ? PROJECT_URL : `${PROJECT_URL}?thread=${job.thread}`;
+  const box = isBoss
+    ? `the main project chat box on the left (placeholder like "Ask Claude a question or start a task..."), NOT any thread panel on the right`
+    : `the reply box of the thread panel on the right side (placeholder like "Steer this thread..."), in the thread titled "${job.title}". NOT the main project chat box on the left`;
+  const prompt = DELIVER_TEMPLATE.replaceAll("{{DEVICE}}", CHROME_DEVICE).replaceAll("{{URL}}", url)
+    .replaceAll("{{BOX}}", box).replaceAll("{{MESSAGE}}", job.command);
+  log("deliver", ref.id, job.title, short(job.command, 80));
+  await ref.update({ status: "sending", startedAt: FieldValue.serverTimestamp(), note: FieldValue.delete(), progress: [], targetUrl: url });
+  const args = ["-p", prompt, "--chrome", "--strict-mcp-config", "--model", DELIVER_MODEL,
+    "--permission-mode", "auto", "--permission-prompts", "none", "--output-format", "stream-json", "--verbose", "--no-session-persistence"];
+  const child = spawn(CLAUDE, args, { cwd: path.join(ROOT, "CatHeroOffice"), stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || "/usr/bin:/bin"}` } });
+  running.set(ref.id, { child, lock: "chrome" });
+  let result = null, buf = "", stderr = "", progress = [], dirty = false;
+  const flush = setInterval(() => { if (dirty) { dirty = false; ref.update({ progress }).catch(() => {}); } }, 2500);
+  const killer = setTimeout(() => child.kill("SIGTERM"), 6 * 60 * 1000);
+  child.stdout.on("data", (chunk) => {
+    buf += chunk;
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let ev; try { ev = JSON.parse(line); } catch { continue; }
+      if (ev.type === "assistant" && ev.message && Array.isArray(ev.message.content)) {
+        for (const b of ev.message.content) if (b.type === "tool_use" && /navigate|computer|form_input|tabs_create/.test(b.name)) {
+          const step = /navigate/.test(b.name) ? "Mở thread trong Chrome" : /tabs_create/.test(b.name) ? "Mở tab mới" : /form_input/.test(b.name) ? "Điền lệnh" : `Thao tác: ${(b.input && b.input.action_summary) || (b.input && b.input.action) || ""}`;
+          progress.push({ t: Date.now(), text: short(step, 120) }); progress = progress.slice(-20); dirty = true;
+        }
+      } else if (ev.type === "result") result = ev;
+    }
+  });
+  child.stderr.on("data", (d) => { stderr = (stderr + d).slice(-3000); });
+  const code = await new Promise((resolve) => child.on("close", resolve));
+  clearInterval(flush); clearTimeout(killer);
+  running.delete(ref.id); locks.delete("chrome");
+  const text = String((result && result.result) || "").trim();
+  const ok = /^DELIVERED\b/.test(text);
+  await ref.update({
+    status: ok ? "sent" : "error", progress, finishedAt: FieldValue.serverTimestamp(),
+    report: ok ? (isBoss ? "Đã gửi vào project chat trên claude.ai." : "Đã gửi vào thread trên claude.ai. Xem trả lời trong thread.") : "",
+    ...(ok ? {} : { error: short(text.replace(/^FAILED:\s*/, "") || stderr || `exit ${code}`, 600) }),
+    ...(result && typeof result.total_cost_usd === "number" ? { costUsd: result.total_cost_usd } : {})
+  });
+  log("delivered", ref.id, ok ? "ok" : "failed", short(text, 120));
+  schedule();
+}
+
 // ---------- scheduler ----------
 let scheduling = false;
 async function schedule() {
@@ -232,6 +288,34 @@ async function schedule() {
       }
       if (!TEAMS[data.team] || !data.command) {
         await ref.update({ status: "error", error: "Không rõ nhân viên hoặc lệnh trống.", finishedAt: FieldValue.serverTimestamp() });
+        continue;
+      }
+      // Default path: post the command into claude.ai (one delivery at a time).
+      if (data.mode !== "local") {
+        if (locks.has("chrome")) {
+          const w = "đang gửi lệnh khác vào claude.ai, xếp hàng chờ";
+          if (data.status !== "waiting" || data.note !== w) await ref.update({ status: "waiting", note: w });
+          continue;
+        }
+        const claimed = await db.runTransaction(async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists || !["queued", "waiting"].includes(snap.get("status"))) return false;
+          tx.update(ref, { status: "sending", claimedBy: os.hostname() });
+          return true;
+        });
+        if (!claimed) continue;
+        const r = ((await db.collection("office").doc("roster").get()).data() || {});
+        const threads = { ...JSON.parse(r.seedJson || "{}"), ...(r.threads || {}) };
+        const thread = threads[data.seatId] || "";
+        if (data.seatId !== "boss" && !thread) {
+          await ref.update({ status: "error", error: "Bàn này chưa gắn thread claude.ai.", finishedAt: FieldValue.serverTimestamp() });
+          continue;
+        }
+        runDelivery(ref, { ...data, thread }).catch(async (e) => {
+          log("delivery crashed", ref.id, e);
+          running.delete(ref.id); locks.delete("chrome");
+          await ref.update({ status: "error", error: short(e.message, 600), finishedAt: FieldValue.serverTimestamp() }).catch(() => {});
+        });
         continue;
       }
       const lock = lockKeyFor(data);
@@ -273,7 +357,7 @@ jobsCol.where("status", "in", ["queued", "waiting"]).onSnapshot((snap) => {
 }, (err) => log("queue listener error", err.message));
 
 // Cancel: kill the Claude process when the page asks.
-jobsCol.where("status", "==", "running").onSnapshot((snap) => {
+jobsCol.where("status", "in", ["running", "sending"]).onSnapshot((snap) => {
   for (const d of snap.docs) {
     const r = running.get(d.id);
     if (r && d.get("cancelRequested")) { log("cancel", d.id); r.child.kill("SIGTERM"); }
@@ -294,9 +378,14 @@ setInterval(beat, 60000);
 
 // Jobs left "running" by a crash or reboot go back to the queue once.
 (async () => {
-  const stale = await jobsCol.where("status", "==", "running").get();
+  const stale = await jobsCol.where("status", "in", ["running", "sending"]).get();
   for (const d of stale.docs) {
     if (running.has(d.id)) continue;
+    if (d.get("status") === "sending") {
+      // Never re-send: the message may already be in the thread.
+      await d.ref.update({ status: "error", error: "Mac mini khởi động lại giữa lúc gửi. Xem thread, nếu chưa có lệnh thì gửi lại.", finishedAt: FieldValue.serverTimestamp() });
+      continue;
+    }
     const retried = d.get("retried");
     await d.ref.update(retried
       ? { status: "error", error: "Mac mini khởi động lại giữa chừng.", finishedAt: FieldValue.serverTimestamp() }
