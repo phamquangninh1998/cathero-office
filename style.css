@@ -602,3 +602,6 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 .member .j-note { margin: 0; }
 @media (max-width: 640px) { .team-btn span { display: none; } .team-btn { padding: 4px 8px; } }
 [hidden] { display: none !important; }
+.gsi-wrap { display: flex; justify-content: center; min-height: 44px; }
+#gsi-btn { width: 300px; max-width: 100%; margin: 0 auto; }
+.linklike { margin-top: 14px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer; }

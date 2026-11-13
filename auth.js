@@ -2,11 +2,11 @@
 // Firestore rules enforce the same list on the server, so data stays private
 // even though this code is public.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ALLOWED_EMAILS } from "./firebase-config.js";
+import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114b";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -100,6 +100,33 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+// Primary sign-in: Google Identity Services button -> Firebase credential.
+// Works on phones because it never needs the firebaseapp.com redirect page.
+function setupGsi(tries = 0) {
+  const gsi = window.google && window.google.accounts && window.google.accounts.id;
+  if (!gsi) { if (tries < 60) setTimeout(() => setupGsi(tries + 1), 150); return; }
+  gsi.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: async (resp) => {
+      $("#gate-error").textContent = "";
+      try {
+        await signInWithCredential(auth, GoogleAuthProvider.credential(resp.credential));
+      } catch (e) {
+        $("#gate-error").textContent = "Đăng nhập lỗi: " + (e.code || e.message);
+      }
+    },
+    auto_select: false,
+    itp_support: true,
+    context: "signin",
+    ux_mode: "popup"
+  });
+  const box = $("#gsi-btn");
+  const width = Math.min(340, Math.max(220, box.clientWidth || 300));
+  gsi.renderButton(box, { theme: "outline", size: "large", shape: "pill", text: "signin_with", logo_alignment: "left", width, locale: "vi" });
+}
+setupGsi();
+
+// Fallback: classic Firebase popup.
 $("#btn-google").addEventListener("click", async () => {
   $("#gate-error").textContent = "";
   try {
@@ -111,5 +138,8 @@ $("#btn-google").addEventListener("click", async () => {
   }
 });
 for (const id of ["#btn-signout", "#btn-switch"]) {
-  $(id).addEventListener("click", () => signOut(auth).then(() => { if (started) location.reload(); }));
+  $(id).addEventListener("click", () => {
+    try { window.google && window.google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
+    signOut(auth).then(() => { if (started) location.reload(); });
+  });
 }

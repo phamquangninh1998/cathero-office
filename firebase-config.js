@@ -12,3 +12,8 @@ export const firebaseConfig = {
 // Google accounts allowed into the office. The server-side copy of this list
 // lives in firestore.rules; change both together.
 export const ALLOWED_EMAILS = ["phamquangninh1998@gmail.com"];
+
+// OAuth web client used by the "Sign in with Google" button (Google Identity Services).
+// Signing in this way never visits cat-hero-office.firebaseapp.com, which fixes the
+// "missing initial state" error on phones that partition storage.
+export const GOOGLE_CLIENT_ID = "760423531513-926l97ksrtl753vl6el21v1rhvji56l3.apps.googleusercontent.com";
