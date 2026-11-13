@@ -347,7 +347,7 @@ body[data-auth="in"] .gate { display: none; }
   width: min(420px, 100%); background: var(--card); border-radius: 28px; padding: 34px 28px 28px; text-align: center;
   box-shadow: 0 6px 0 rgba(120,90,50,.15), 0 20px 50px rgba(120,80,40,.15);
 }
-.gate-card h1 { margin: 14px 0 6px; font-size: 30px; font-weight: 800; }
+.gate-card h1 { margin: 14px 0 20px; font-size: 30px; font-weight: 800; }
 .gate-card p { margin: 0 0 18px; color: var(--muted); font-weight: 600; font-size: 15.5px; line-height: 1.45; }
 .gate-card p b { color: var(--ink); word-break: break-all; }
 .logo.big { width: 72px; height: 72px; border-radius: 22px; margin: 0 auto; }
