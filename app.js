@@ -161,6 +161,7 @@ window.OfficeApp = { start: function (api) {
     const cur = { kind: "team", team };
     current = cur;
     const panel = $("#panel");
+    panel.classList.remove("log-mode");
     const members = teamSeats(team);
     const icon = team.appIcon && (api.icons || {})[team.id];
     $("#p-avatar").innerHTML = icon ? `<img class="p-team-icon" src="${icon}" alt="">` : `<div class="p-team-icon svg">${A.ICONS[team.icon] || ""}</div>`;
@@ -192,6 +193,7 @@ window.OfficeApp = { start: function (api) {
     if (cur.kind === "team") return openTeamPanel(cur.team);
     current = cur;
     const panel = $("#panel");
+    panel.classList.remove("log-mode");
     const isBoss = cur.kind === "boss";
     const s = cur.seat;
     const hired = true;
@@ -505,6 +507,16 @@ window.OfficeApp = { start: function (api) {
         kind = k === "ok" ? "ok" : k === "ask" ? "ask" : k === "err" ? "err" : "";
         label = kind === "ok" ? "✓" : kind === "ask" ? "?" : kind === "err" ? "!" : "";
       }
+      const seatEl = el.closest(".seat");
+      if (seatEl) {
+        seatEl.classList.toggle("busy", !!active);
+        const fresh = list.find((j) => ACTIVE.includes(j.status) && Date.now() - tsMs(j.createdAt) < 12000);
+        if (fresh && !seatEl.dataset.flashed?.includes(fresh.id)) {
+          seatEl.dataset.flashed = (seatEl.dataset.flashed || "") + " " + fresh.id;
+          seatEl.classList.remove("incoming"); void seatEl.offsetWidth; seatEl.classList.add("incoming");
+          setTimeout(() => seatEl.classList.remove("incoming"), 3600);
+        }
+      }
       el.hidden = !kind;
       el.className = "bubble " + kind;
       el.innerHTML = kind === "run" ? "<i></i><i></i><i></i>" : label;
@@ -557,11 +569,38 @@ window.OfficeApp = { start: function (api) {
     return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
   }
 
+  function seatName(id) {
+    if (id === "boss") return "Trợ lý CEO";
+    const s = seats[id];
+    return s ? s.title : id;
+  }
+  function fromLabel(j) {
+    if (j.createdBy === "ceo-assistant") return "Trợ lý CEO";
+    if (j.batchId) return `Anh Ninh (nhắn cả team)`;
+    if (j.createdBy && j.createdBy.includes("@") && !j.createdBy.startsWith("test@")) return "Anh Ninh";
+    if (j.createdBy && j.createdBy.startsWith("test@")) return "Thử hệ thống";
+    return "Anh Ninh";
+  }
+  // Jobs the CEO assistant created while running job `id`.
+  function childrenOf(id) { return jobs.filter((c) => c.parentJob === id).sort((a, b) => tsMs(a.createdAt) - tsMs(b.createdAt)); }
+  function routeChips(list) {
+    return list.map((c) => {
+      const [st, k] = STATUS[c.status] || [c.status, "off"];
+      return `<button class="route-chip ${k}" data-open-seat="${c.seatId}" data-open-job="${c.id}" title="${esc(st)}">${esc(seatName(c.seatId))}<em>${esc(st)}</em></button>`;
+    }).join("");
+  }
+
   function jobCard(j, open) {
     const [label, kind] = STATUS[j.status] || [j.status, "off"];
     const active = ACTIVE.includes(j.status);
     const progress = (j.progress || []).slice(-5);
     let body = "";
+    if (j.seatId === "boss") {
+      const kids = childrenOf(j.id);
+      body += `<div class="routed"><b>Đã giao cho:</b> ${kids.length ? routeChips(kids) : `<span class="j-note">${ACTIVE.includes(j.status) ? "chưa giao ai (đang làm)" : "không giao cho ai, Trợ lý tự trả lời"}</span>`}</div>`;
+    } else if (j.createdBy === "ceo-assistant" || j.batchId) {
+      body += `<p class="j-from">Người giao: <b>${esc(fromLabel(j))}</b></p>`;
+    }
     if (j.status === "waiting" && j.note) body += `<p class="j-note">${esc(j.note)}</p>`;
     if (j.status === "running") {
       body += progress.length
@@ -572,7 +611,7 @@ window.OfficeApp = { start: function (api) {
     if (j.status === "error" && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
     const when = j.finishedAt ? `${ago(tsMs(j.finishedAt))} · ${dur(j.startedAt || j.createdAt, j.finishedAt)}`
       : j.startedAt ? `bắt đầu ${ago(tsMs(j.startedAt))}` : ago(tsMs(j.createdAt));
-    return `<li class="job ${kind}">
+    return `<li class="job ${kind}" data-id="${j.id}">
       <details ${open ? "open" : ""}>
         <summary>
           <span class="j-chip ${kind}">${kind === "run" ? '<i class="spin"></i>' : ""}${label}</span>
@@ -650,16 +689,74 @@ window.OfficeApp = { start: function (api) {
     [...$("#p-jobs-list").children].forEach((li, i) => { li.dataset.id = list[i].id; });
   }
 
+  // ---------- company-wide log ----------
+  function openLogPanel() {
+    current = { kind: "log", filter: "all" };
+    const panel = $("#panel");
+    panel.classList.add("log-mode");
+    $("#p-avatar").innerHTML = `<div class="p-team-icon svg log-ico">📒</div>`;
+    $("#p-title").textContent = "Nhật ký giao việc";
+    $("#p-sub").textContent = "Mọi việc trong studio, mới nhất ở trên";
+    $("#p-desc").textContent = "Ai giao, ai nhận, đang ở bước nào và báo cáo ra sao. Bấm tên nhân viên để mở bàn của họ.";
+    const badge = $("#p-badge"); badge.textContent = "Toàn studio"; badge.className = "pill gold";
+    renderLog();
+    document.body.classList.add("panel-open");
+    panel.setAttribute("aria-hidden", "false");
+  }
+
+  function renderLog() {
+    const teams = [["all", "Tất cả"], ["ceo", "Bàn CEO"], ...D.teams.map((t) => [t.id, t.name])];
+    const f = current.filter || "all";
+    $("#p-log-filters").innerHTML = teams.map(([id, name]) =>
+      `<button class="lchip ${f === id ? "on" : ""}" data-log-filter="${id}">${esc(name)}</button>`).join("");
+    const list = jobs.filter((j) => f === "all" || j.team === f).slice(0, 60);
+    const openIds = new Set([...document.querySelectorAll("#p-log-list details[open]")].map((d) => d.closest(".job").dataset.id));
+    $("#p-log-list").innerHTML = list.length ? list.map((j) => {
+      const [st, k] = STATUS[j.status] || [j.status, "off"];
+      const kids = j.seatId === "boss" ? childrenOf(j.id) : [];
+      return `<li class="job log ${k}" data-id="${j.id}">
+        <details ${openIds.has(j.id) ? "open" : ""}>
+          <summary>
+            <span class="j-chip ${k}">${k === "run" ? '<i class="spin"></i>' : ""}${esc(st)}</span>
+            <span class="j-route"><b>${esc(fromLabel(j))}</b> → <button class="linkbtn" data-open-seat="${j.seatId}" data-open-job="${j.id}">${esc(seatName(j.seatId))}</button></span>
+            <span class="j-cmd">${esc(j.command)}</span>
+            <time>${esc(fmtTime(tsMs(j.createdAt)))}${j.finishedAt ? " · " + dur(j.startedAt || j.createdAt, j.finishedAt) : ""}</time>
+          </summary>
+          <div class="j-body">
+            ${kids.length ? `<div class="routed"><b>Đã giao cho:</b> ${routeChips(kids)}</div>` : ""}
+            ${j.report ? `<div class="j-report">${md(j.report)}</div>` : j.status === "running" && (j.progress || []).length ? `<p class="j-note">${esc(j.progress[j.progress.length - 1].text)}</p>` : j.note ? `<p class="j-note">${esc(j.note)}</p>` : ""}
+            ${j.error ? `<p class="j-note err">${esc(j.error)}</p>` : ""}
+          </div>
+        </details>
+      </li>`;
+    }).join("") : `<li class="j-note">Chưa có việc nào.</li>`;
+  }
+
   api.watchJobs((list) => {
     jobs = list;
     renderBubbles();
     renderWorker();
-    if (current) { renderPanelJobs(); markSeen(current); }
+    if (current && current.kind === "log") renderLog();
+    else if (current) { renderPanelJobs(); markSeen(current); }
   });
   api.watchWorker((w) => { worker = w; renderWorker(); });
   setInterval(renderWorker, 30000);
 
   document.addEventListener("click", (e) => {
+    const r = e.target.closest("[data-open-seat]");
+    if (r) {
+      e.preventDefault();
+      const sid = r.dataset.openSeat;
+      openPanel(sid === "boss" ? { kind: "boss" } : { kind: "seat", seat: seats[sid] });
+      setTimeout(() => {
+        const li = document.querySelector(`#p-jobs-list .job[data-id="${r.dataset.openJob}"]`);
+        if (li) { li.querySelector("details").open = true; li.scrollIntoView({ block: "center", behavior: "smooth" }); li.classList.add("flash"); setTimeout(() => li.classList.remove("flash"), 1800); }
+      }, 260);
+      return;
+    }
+    const lf = e.target.closest("[data-log-filter]");
+    if (lf) { current.filter = lf.dataset.logFilter; renderLog(); return; }
+    if (e.target.closest("#btn-log")) { openLogPanel(); return; }
     const b = e.target.closest(".j-cancel-batch");
     if (b) {
       const list = jobs.filter((j) => j.batchId === b.dataset.batch && ACTIVE.includes(j.status));

@@ -85,7 +85,7 @@ function ceoPrompt(job) {
     `Game folders (read only for you): ${GAME_FOLDERS.join(", ")}. Never edit game files yourself; delegate changes to the right employee with dispatch. Write your own notes only in ${path.join(ROOT, "CatHeroOffice", "workspace", "ceo")}.`,
     `When you dispatch, write a clear self-contained brief (goal, constraints, what done looks like) in Vietnamese, pick the right seat or team, and avoid duplicate work that is already queued or running (check status first). Do not dispatch more than 6 jobs per request unless Phuong asked for it.`,
     `Outward actions are NOT allowed in this run and must not be delegated either: store submissions, publishing, pushing to public places, ad campaigns or budgets, sending messages, purchases, deleting data. If one is needed, begin your final message with "CẦN XÁC NHẬN:" and say exactly what, where and why.`,
-    `Your final message is the report on the CEO desk: Vietnamese, lead with the answer, short bullets, list any jobs you dispatched (employee + one-line task + job id), and say what you could not verify. No em-dashes.`
+    `Your final message is the report on the CEO desk, in Vietnamese. Its FIRST line must be "Đã giao cho: <employee title (team)>, ..." listing every job you dispatched, or "Đã giao cho: không ai (Trợ lý tự trả lời)". Then the answer in short bullets, then one bullet per dispatched job (employee, one-line task), then what you could not verify. No em-dashes.`
   ].join("\n");
 }
 
