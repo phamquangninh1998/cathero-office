@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, sig
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114l";
+import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114m";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -73,7 +73,7 @@ if (DEMO) {
     history: {}, icons: Object.fromEntries(["b1", "b2", "b3", "b4", "sports", "moe", "paperroll"].map((k) => [k, `icons/${k}.png`])), saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
     watchJobs: (cb) => cb([
       { id: "d1", seatId: "b2-developer", status: "running", command: "Kiểm tra lỗi màn 12", createdAt: T(now - 60000), startedAt: T(now - 50000), progress: [{ text: "Đọc: Assets/Scripts/Wave.cs" }] },
-      { id: "c1", seatId: "boss", team: "ceo", status: "done", command: "Ai nên kiểm tra rủi ro chất lượng của 100 Sports?", createdBy: "me@x.com", createdAt: T(now - 120000), startedAt: T(now - 118000), finishedAt: T(now - 90000), report: "Đã giao cho: QA · Chung\n\n- QA sẽ liệt kê 3 rủi ro lớn nhất dựa trên tài liệu." },
+      { id: "c1", seatId: "boss", team: "ceo", status: "needs_you", command: "bản 4: solo bị reject ở trên app store connect kìa, xử lý đi", createdBy: "me@x.com", createdAt: T(now - 600000), startedAt: T(now - 598000), sentAt: T(now - 597000), delegatedTo: "Developer · Bản 4 Solo", delegatedSeat: "b4-developer", followUrl: "https://claude.ai/code/project/x?thread=y", ask: "Bạn đồng ý đổi Simulated Gambling thành None rồi gửi duyệt lại không?", conversation: [{ who: "claude", text: "Apple từ chối vì khai báo độ tuổi có mô phỏng cờ bạc." }, { who: "claude", text: "Bạn đồng ý đổi Simulated Gambling thành None rồi gửi duyệt lại không?" }] },
       { id: "c2", seatId: "chung-qa", team: "chung", parentJob: "c1", createdBy: "ceo-assistant", status: "running", command: "Liệt kê 3 rủi ro chất lượng lớn nhất của 100 Sports", createdAt: T(now - 95000), startedAt: T(now - 90000), progress: [{ text: "Đọc: Docs/release/2026-11-12-health-check.md" }] },
       { id: "t1", seatId: "b1-developer", batchId: "b1-demo", batchOrder: 0, status: "done", command: "Mỗi người đề xuất 3 việc nên làm tuần này", createdAt: T(now - 300000), startedAt: T(now - 290000), finishedAt: T(now - 200000), report: "- Sửa lỗi kẹt boss màn 18\n- Giảm dung lượng build\n- Thêm test tự động" },
       { id: "t2", seatId: "b1-designer", batchId: "b1-demo", batchOrder: 1, status: "running", command: "Mỗi người đề xuất 3 việc nên làm tuần này", createdAt: T(now - 300000), startedAt: T(now - 100000), progress: [{ text: "Đọc: Docs/GameDesign.md" }] },

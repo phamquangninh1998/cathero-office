@@ -427,13 +427,16 @@ window.OfficeApp = { start: function (api) {
     sending: ["Đang gửi vào claude.ai", "run"],
     sent: ["Đã gửi, chờ trả lời", "wait"],
     send_failed: ["Lỗi gửi", "err"],
-    replying: ["Đang làm trong thread", "run"],
+    replying: ["Đang làm", "run"],
+    delegated: ["Đã giao việc", "run"],
+    needs_you: ["Cần bạn", "ask"],
+    sent_reply: ["Đã gửi trả lời", "ok"],
     done: ["Xong", "ok"],
     needs_confirm: ["Cần bạn xác nhận", "ask"],
     error: ["Lỗi", "err"],
     cancelled: ["Đã huỷ", "off"]
   };
-  const ACTIVE = ["queued", "waiting", "running", "sending", "sent", "replying"];
+  const ACTIVE = ["queued", "waiting", "running", "sending", "sent", "replying", "delegated"];
 
   function canRunJob(cur) { return true; }
 
@@ -483,7 +486,7 @@ window.OfficeApp = { start: function (api) {
     chip.innerHTML = `<i></i>${on ? (busy ? `Mac mini đang làm ${busy} việc` : "Mac mini sẵn sàng") : "Mac mini offline"}`;
   }
 
-  function seatJobs(seatId) { return jobs.filter((j) => j.seatId === seatId); }
+  function seatJobs(seatId) { return jobs.filter((j) => !j.replyTo && (j.seatId === seatId || j.delegatedSeat === seatId)); }
 
   function seenKey(seatId) { return "seen." + seatId; }
   function markSeen(cur) {
@@ -509,7 +512,9 @@ window.OfficeApp = { start: function (api) {
       const active = list.find((j) => ACTIVE.includes(j.status));
       const latest = list[0];
       let kind = "", label = "";
-      if (active) {
+      const asking = list.find((j) => j.status === "needs_you");
+      if (asking) { kind = "ask"; label = "?"; }
+      else if (active) {
         kind = active.status === "running" ? "run" : "wait";
         label = active.status === "running" ? "" : "⏳";
       } else if (latest && latest.finishedAt && tsMs(latest.finishedAt) > store.get(seenKey(id), 0)) {
@@ -617,8 +622,26 @@ window.OfficeApp = { start: function (api) {
         ? `<ul class="j-progress">${progress.map((p) => `<li>${esc(p.text)}</li>`).join("")}</ul>`
         : `<p class="j-note">Đang khởi động…</p>`;
     }
-    if (j.report) body += `<div class="j-report">${md(j.report)}</div>`;
-    if (j.targetUrl) body += `<a class="btn small ghost j-open" href="${esc(j.targetUrl)}" target="_blank" rel="noopener">Mở thread ↗</a>`;
+    if (j.delegatedTo) {
+      body += `<div class="routed"><b>Đã giao cho:</b> ${j.delegatedSeat
+        ? `<button class="route-chip ${kind}" data-open-seat="${j.delegatedSeat}" data-open-job="${j.id}">${esc(j.delegatedTo)}</button>`
+        : `<span class="route-chip">${esc(j.delegatedTo)}</span>`}</div>`;
+    }
+    if (j.note && j.status !== "waiting") body += `<p class="j-note">${esc(j.note)}</p>`;
+    if (j.status === "needs_you" && j.ask) body += `<div class="j-ask"><b>Cần bạn:</b> ${md(j.ask)}</div>`;
+    const convo = j.conversation || [];
+    if (convo.length) {
+      body += `<ol class="convo">${convo.map((m) => `<li class="msg ${m.who === "you" ? "me" : "them"}">
+        <span class="who">${m.who === "you" ? "Bạn" : m.who === "coordinator" ? "Điều phối" : esc((j.delegatedTo || j.title || "Nhân viên").split(" · ")[0])}</span>
+        <div class="j-report">${md(m.text)}</div></li>`).join("")}</ol>`;
+    } else if (j.report) body += `<div class="j-report">${md(j.report)}</div>`;
+    const replyUrl = j.followUrl || (j.seatId !== "boss" ? j.targetUrl : (j.delegatedTo ? null : j.targetUrl));
+    if (replyUrl && ["sent", "replying", "needs_you", "done", "delegated"].includes(j.status)) {
+      body += `<div class="reply-box"><textarea rows="2" placeholder="Trả lời ${esc(j.delegatedTo || j.title || "")}…" data-reply-for="${j.id}"></textarea>
+        <button class="btn primary small" data-reply-send="${j.id}">Gửi trả lời</button></div>`;
+    }
+    const openUrl = j.followUrl || j.targetUrl;
+    if (openUrl) body += `<a class="btn small ghost j-open" href="${esc(openUrl)}" target="_blank" rel="noopener">Mở thread ↗</a>`;
     if ((j.status === "error" || j.status === "send_failed") && j.error) body += `<p class="j-note err">${esc(j.error)}</p>`;
     const when = j.finishedAt ? `${ago(tsMs(j.finishedAt))} · ${dur(j.startedAt || j.createdAt, j.finishedAt)}`
       : j.startedAt ? `bắt đầu ${ago(tsMs(j.startedAt))}` : ago(tsMs(j.createdAt));
@@ -630,7 +653,7 @@ window.OfficeApp = { start: function (api) {
           <time>${esc(when)}</time>
         </summary>
         <div class="j-body">${body}
-          ${active ? `<button class="btn small ghost j-cancel" data-job="${j.id}">${["sent", "replying"].includes(j.status) ? "Ngừng theo dõi" : "Huỷ"}</button>` : ""}
+          ${active ? `<button class="btn small ghost j-cancel" data-job="${j.id}">${["sent", "replying", "delegated"].includes(j.status) ? "Ngừng theo dõi" : "Huỷ"}</button>` : ""}
         </div>
       </details>
     </li>`;
@@ -668,7 +691,19 @@ window.OfficeApp = { start: function (api) {
     </li>`;
   }
 
+  const replyDrafts = {};
+  document.addEventListener("input", (e) => { const t = e.target.closest && e.target.closest("[data-reply-for]"); if (t) replyDrafts[t.dataset.replyFor] = t.value; });
+  function restoreReplyDrafts() {
+    document.querySelectorAll("[data-reply-for]").forEach((t) => { if (replyDrafts[t.dataset.replyFor]) t.value = replyDrafts[t.dataset.replyFor]; });
+  }
+
+  let deferredRender = false;
+  document.addEventListener("focusout", (e) => {
+    if (deferredRender && e.target.closest && e.target.closest("[data-reply-for]")) { deferredRender = false; setTimeout(renderPanelJobs, 50); }
+  });
   function renderPanelJobs() {
+    // Do not rebuild the list under the user's fingers while they type a reply.
+    if (document.activeElement && document.activeElement.matches && document.activeElement.matches("[data-reply-for]")) { deferredRender = true; return; }
     const box = $("#p-jobs");
     if (!current || !canRunJob(current)) { box.hidden = true; return; }
     if (current.kind === "team") {
@@ -695,9 +730,10 @@ window.OfficeApp = { start: function (api) {
     const openIds = new Set([...box.querySelectorAll("details[open]")].map((d) => d.closest(".job").dataset.id));
     const firstRender = !box.dataset.seat || box.dataset.seat !== sid;
     box.dataset.seat = sid;
-    $("#p-jobs-list").innerHTML = list.map((j, i) => jobCard(j, firstRender ? i === 0 : openIds.has(j.id) || (i === 0 && ACTIVE.includes(j.status))))
+    $("#p-jobs-list").innerHTML = list.map((j, i) => jobCard(j, firstRender ? i === 0 : openIds.has(j.id) || (i === 0 && (ACTIVE.includes(j.status) || j.status === "needs_you"))))
       .join("");
     [...$("#p-jobs-list").children].forEach((li, i) => { li.dataset.id = list[i].id; });
+    restoreReplyDrafts();
   }
 
   // ---------- company-wide log ----------
@@ -755,6 +791,22 @@ window.OfficeApp = { start: function (api) {
   setInterval(() => { if (!document.hidden) renderWorker(); }, 60000);
 
   document.addEventListener("click", (e) => {
+    const rs = e.target.closest("[data-reply-send]");
+    if (rs) {
+      const id = rs.dataset.replySend;
+      const box = document.querySelector(`[data-reply-for="${id}"]`);
+      const text = (box && box.value || "").trim();
+      const j = jobs.find((x) => x.id === id);
+      if (!text || !j) { if (box) box.focus(); return; }
+      const url = j.followUrl || j.targetUrl;
+      rs.disabled = true;
+      api.createJob({ seatId: j.delegatedSeat || j.seatId, title: j.delegatedTo || j.title, role: j.role || "", team: j.team || "",
+        command: text, mode: "thread", targetUrl: url, replyTo: j.id })
+        .then(() => { box.value = ""; replyDrafts[id] = ""; toast("Đang gửi trả lời vào thread…"); })
+        .catch((err) => toast("Không gửi được: " + (err.code || err.message)))
+        .finally(() => { rs.disabled = false; });
+      return;
+    }
     const r = e.target.closest("[data-open-seat]");
     if (r) {
       e.preventDefault();

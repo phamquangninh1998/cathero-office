@@ -225,7 +225,7 @@ function targetFor(job) {
   const isBoss = job.seatId === "boss";
   return {
     isBoss,
-    which: isBoss ? "project" : "thread",
+    which: isBoss && !job.targetUrl ? "project" : (job.targetUrl && !/thread=/.test(job.targetUrl) ? "project" : "thread"),
     url: job.targetUrl || (isBoss ? PROJECT_URL : `${PROJECT_URL}?thread=${job.thread}`)
   };
 }
@@ -255,9 +255,23 @@ async function runDelivery(ref, job) {
     log("send failed", ref.id, e.message);
   }
   running.delete(ref.id); locks.delete("chrome");
+  if (job.replyTo && update.status === "sent") {
+    // A reply typed on a job card: the parent card keeps following the thread.
+    update = { ...update, status: "sent_reply", watchNext: FieldValue.delete() };
+    await jobsCol.doc(job.replyTo).update({ status: "replying", watchTries: 0, watchNext: Date.now() + 10000, lastActivity: Date.now(),
+      ask: FieldValue.delete(), finishedAt: FieldValue.delete() }).catch((e) => log("reopen parent failed", e.message));
+  }
   await ref.update(update);
   bumpIdle();
   schedule();
+}
+
+// Seat titles for every desk, read from the page's data.js.
+function officeSeats() {
+  const sandbox = { window: {} };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, "CatHeroOffice", "data.js"), "utf8"), sandbox);
+  const D = sandbox.window.OFFICE_DATA;
+  return D.teams.flatMap((t) => t.seats.map((s) => ({ id: `${t.id}-${s.role}`, title: `${D.roles[s.role].label} · ${t.name}`, label: D.roles[s.role].label, team: t.name })));
 }
 
 // Roster kept live in memory so a send does not wait for a read.
@@ -273,47 +287,122 @@ async function rosterThreads() {
 
 // ---------- copying the employee's reply back from claude.ai ----------
 // Reading is cheap now (no AI): check often at first, then back off.
-const WATCH_STEPS_MIN = [0.25, 0.25, 0.5, 0.5, 1, 1, 2, 3, 5, 10];
+const WATCH_STEPS_MIN = [0.25, 0.25, 0.5, 0.5, 1, 1, 2, 3, 5];
 const WATCH_MAX_MS = 8 * 3600 * 1000;
 let watching = false;
+const WATCHED = ["sent", "replying", "delegated", "needs_you"];
+const ASK_RE = /CẦN XÁC NHẬN|cần (bạn|anh|chị)|bạn (muốn|chọn|đồng ý|xác nhận|quyết định|cho phép)|xác nhận (giúp|một câu)|đồng ý (không|chưa)|có (muốn|nên)[^.?]*\?|chọn (1|một|phương án)|\?\s*$/im;
+
+// Find which employee seat a coordinator thread card points at ("Developer · Bản 4 Solo").
+function seatForCard(title) {
+  const n = (x) => String(x || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const t = n(title);
+  const seats = officeSeats().sort((a, b) => b.title.length - a.title.length);
+  return seats.find((s) => t === n(s.title) || t.startsWith(n(s.title)))
+    || seats.find((s) => t.startsWith(n(s.label)) && t.includes("· " + n(s.team)));
+}
+
+function lastQuestion(text) {
+  const parts = String(text).split(/(?<=[.?!:])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
+  const qs = parts.filter((x) => /\?|xác nhận|đồng ý|chọn|quyết định|cần bạn/i.test(x));
+  return (qs.slice(-2).join(" ") || parts.slice(-1)[0] || "").slice(0, 600);
+}
+
 async function watchTick() {
   if (watching || locks.has("chrome") || pending.some((p) => p.data.mode !== "local")) return;
   watching = true;
   try {
-    const snap = await jobsCol.where("status", "in", ["sent", "replying"]).get();
-    const due = snap.docs.filter((d) => (d.get("watchNext") || 0) <= Date.now())
+    const snap = await jobsCol.where("status", "in", WATCHED).get();
+    const due = snap.docs.filter((d) => !d.get("replyTo") && (d.get("watchNext") || 0) <= Date.now())
       .sort((a, b) => (a.get("watchNext") || 0) - (b.get("watchNext") || 0));
     const d = due[0];
     if (!d) return;
     const j = d.data();
     if (j.cancelRequested) { await d.ref.update({ status: "cancelled", finishedAt: FieldValue.serverTimestamp() }); return; }
     const sentAt = j.sentAt && j.sentAt.toMillis ? j.sentAt.toMillis() : Date.now();
-    if (Date.now() - sentAt > WATCH_MAX_MS) {
-      await d.ref.update({ status: "done", finishedAt: FieldValue.serverTimestamp(), report: (j.report || "") + "\n\n(Ngừng theo dõi sau 8 giờ, xem tiếp trong thread.)" });
+    const tries = (j.watchTries || 0) + 1;
+    const step = WATCH_STEPS_MIN[Math.min(tries, WATCH_STEPS_MIN.length - 1)];
+    if (Date.now() - (j.lastActivity || sentAt) > WATCH_MAX_MS) {
+      await d.ref.update({ status: j.status === "needs_you" ? "needs_you" : "done", watchNext: FieldValue.delete(), finishedAt: FieldValue.serverTimestamp() });
       return;
     }
     locks.add("chrome");
-    let info = null;
+    let conv = null, delegated = null;
     try {
-      const t = targetFor(j);
-      info = await fast.readReplies({ url: t.url, which: t.which, since: j.command });
+      const isBoss = j.seatId === "boss";
+      if (isBoss && !j.followUrl) {
+        // CEO desk: wait for the coordinator; a thread card in its reply = handoff.
+        const pc = await fast.readConversation({ url: PROJECT_URL, which: "project" });
+        const head = String(j.command).replace(/\s+/g, " ").trim().slice(0, 40);
+        let idx = -1;
+        pc.rows.forEach((r, k) => { if (r.who === "you" && r.text.replace(/\s+/g, " ").includes(head)) idx = k; });
+        const after = idx >= 0 ? pc.rows.slice(idx + 1).filter((r) => r.who === "claude") : [];
+        const card = after.find((r) => r.card);
+        if (card) {
+          const seat = seatForCard(card.card);
+          const threads = rosterCache || await rosterThreads();
+          delegated = { title: card.card, seatId: seat ? seat.id : null, url: seat && threads[seat.id] ? `${PROJECT_URL}?thread=${threads[seat.id]}` : null };
+        }
+        conv = { rows: after.map((r) => ({ who: "coordinator", text: r.text, at: r.at })), working: pc.working, found: idx >= 0 };
+      } else {
+        const url = j.followUrl || targetFor(j).url;
+        const which = j.followUrl ? "thread" : targetFor(j).which;
+        const c = await fast.readConversation({ url, which });
+        let rows;
+        if (j.followUrl) {
+          // Followed thread: everything since the CEO command was sent.
+          const since = sentAt - 60000;
+          rows = c.rows.filter((r) => r.at && Date.parse(r.at) >= since);
+        } else {
+          const head = String(j.command).replace(/\s+/g, " ").trim().slice(0, 40);
+          let idx = -1;
+          c.rows.forEach((r, k) => { if (idx < 0 && r.who === "you" && r.text.replace(/\s+/g, " ").includes(head)) idx = k; });
+          rows = idx >= 0 ? c.rows.slice(idx + 1) : [];
+        }
+        conv = { rows, working: c.working, found: true };
+      }
     } catch (e) {
       log("read failed", e.message);
-      info = null;
     } finally { locks.delete("chrome"); bumpIdle(); }
-    const tries = (j.watchTries || 0) + 1;
-    const next = Date.now() + WATCH_STEPS_MIN[Math.min(tries, WATCH_STEPS_MIN.length - 1)] * 60000;
-    if (!info || info.state === "none") {
-      await d.ref.update({ watchTries: tries, watchNext: next });
-    } else if (info.state === "working") {
-      await d.ref.update({ status: "replying", watchTries: tries, watchNext: next, report: String(info.text || "").slice(0, 8000),
-        progress: [{ t: Date.now(), text: "Nhân viên đang làm trong thread" }] });
-    } else {
-      const text = String(info.text || "").slice(0, 12000);
-      const ask = /CẦN XÁC NHẬN|cần bạn (xác nhận|đồng ý|quyết định)|Bạn (muốn|chọn)/i.test(text);
-      await d.ref.update({ status: ask ? "needs_confirm" : "done", report: text, finishedAt: FieldValue.serverTimestamp(), watchNext: FieldValue.delete() });
-      log("reply copied", d.id, ask ? "needs_confirm" : "done");
+
+    const next = Date.now() + step * 60000;
+    if (!conv) { await d.ref.update({ watchTries: tries, watchNext: next }); return; }
+    const upd = { watchTries: tries, watchNext: next };
+    if (delegated) {
+      Object.assign(upd, { status: "delegated", delegatedTo: delegated.title, delegatedSeat: delegated.seatId || null,
+        followUrl: delegated.url || null, watchTries: 0, watchNext: Date.now() + 15000, lastActivity: Date.now(),
+        conversation: conv.rows.slice(-20) });
+      if (!delegated.url) Object.assign(upd, { note: "Không tìm được thread của người được giao; xem trong project chat." });
+      log("delegated", d.id, delegated.title);
+      await d.ref.update(upd);
+      return;
     }
+    const msgs = conv.rows.slice(-24);
+    const prev = JSON.stringify(j.conversation || []);
+    if (JSON.stringify(msgs) !== prev) { upd.conversation = msgs; upd.lastActivity = Date.now(); upd.watchTries = 0; upd.watchNext = Date.now() + 15000; }
+    const lastClaude = [...msgs].reverse().find((r) => r.who === "claude" || r.who === "coordinator");
+    const lastIsYou = msgs.length && msgs[msgs.length - 1].who === "you";
+    if (conv.working || lastIsYou) {
+      upd.status = j.followUrl || msgs.length ? "replying" : j.status;
+    } else if (lastClaude && (!j.seatId || j.seatId !== "boss" || j.followUrl)) {
+      if (ASK_RE.test(lastClaude.text)) {
+        upd.status = "needs_you";
+        upd.ask = lastQuestion(lastClaude.text);
+        upd.watchNext = Date.now() + Math.max(step, 1) * 60000;
+      } else {
+        upd.status = "done";
+        upd.report = lastClaude.text.slice(0, 12000);
+        upd.finishedAt = FieldValue.serverTimestamp();
+        upd.watchNext = FieldValue.delete();
+      }
+    } else if (lastClaude && j.seatId === "boss" && !j.followUrl) {
+      // Coordinator answered without handing off: that answer is the result.
+      if (ASK_RE.test(lastClaude.text)) { upd.status = "needs_you"; upd.ask = lastQuestion(lastClaude.text); }
+      else if (Date.now() - sentAt > 90000) { upd.status = "done"; upd.report = lastClaude.text.slice(0, 12000); upd.finishedAt = FieldValue.serverTimestamp(); upd.watchNext = FieldValue.delete(); }
+    }
+    if (upd.status && upd.status !== "done" && upd.status !== "needs_you") upd.ask = FieldValue.delete();
+    await d.ref.update(upd);
+    if (upd.status && upd.status !== j.status) log("job", d.id, j.status, "->", upd.status);
   } catch (e) {
     log("watch error", e.message);
   } finally {
@@ -327,7 +416,7 @@ let idleTimer = null;
 function bumpIdle() {
   clearTimeout(idleTimer);
   idleTimer = setTimeout(async () => {
-    const busy = locks.has("chrome") || (await jobsCol.where("status", "in", ["sent", "replying", "queued", "sending"]).limit(1).get()).size;
+    const busy = locks.has("chrome") || (await jobsCol.where("status", "in", ["sent", "replying", "delegated", "queued", "sending"]).limit(1).get()).size;
     if (busy) return bumpIdle();
     await fast.closeTab();
     log("warm tab closed (idle)");
@@ -367,7 +456,7 @@ async function schedule() {
         });
         if (!claimed) continue;
         const thread = (rosterCache || await rosterThreads())[data.seatId] || "";
-        if (data.seatId !== "boss" && !thread) {
+        if (data.seatId !== "boss" && !thread && !data.targetUrl) {
           await ref.update({ status: "error", error: "Bàn này chưa gắn thread claude.ai.", finishedAt: FieldValue.serverTimestamp() });
           continue;
         }

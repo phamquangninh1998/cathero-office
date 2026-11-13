@@ -162,3 +162,44 @@ export async function closeTab() {
 export async function probe() {
   try { return await osa("exists", 1); } catch (e) { return "ERROR " + e.message; }
 }
+
+// Whole conversation in a panel, as {who, text, at, card} rows, plus "working".
+// `who` is "you" for Phuong's messages and "claude" for replies. `card` is the
+// thread title when the coordinator handed the work to a thread.
+function convoCode(which) {
+  return `JSON.stringify((() => {
+    const feeds = [...document.querySelectorAll('[role=feed]')].map(f => ({ f, x: f.getBoundingClientRect().x })).sort((a, b) => a.x - b.x);
+    if (!feeds.length) return { rows: [], working: false };
+    const feed = (${JSON.stringify(which)} === "thread" ? feeds[feeds.length - 1] : feeds[0]).f;
+    const rows = [...feed.querySelectorAll('[data-testid=transcript-row]')].map(r => {
+      const h = ((r.querySelector('h3') || {}).textContent || "");
+      const time = r.querySelector('time[datetime]');
+      const body = r.querySelector('[data-cds=Prose]') || r.querySelector('[data-testid=user-message]');
+      const txt = r.innerText || "";
+      const ci = txt.indexOf("Thread details and actions");
+      return { h, at: time ? time.getAttribute('datetime') : "", body: body ? body.innerText : "", text: txt, card: ci > 0 ? txt.slice(0, ci).trim().split("\\n").pop() : "" };
+    });
+    return { rows, working: !!feed.querySelector('[data-working-row]') };
+  })())`;
+}
+
+export async function readConversation({ url, which }) {
+  await goReady(url, which);
+  const t = Date.now();
+  let data = null;
+  while (Date.now() - t < 8000) {
+    data = await js(convoCode(which)).catch(() => null);
+    if (data && data.rows.length) break;
+    await sleep(200);
+  }
+  if (!data) return { rows: [], working: false };
+  const rows = [];
+  let busy = data.working;
+  data.rows.forEach((r, i) => {
+    if (!r.h) { if (r.text.trim() && i >= data.rows.length - 2) busy = true; return; }
+    const who = /^You said/i.test(r.h) ? "you" : "claude";
+    const text = (r.body || clean(r)).trim();
+    rows.push({ who, text, at: r.at, card: r.card });
+  });
+  return { rows, working: busy };
+}

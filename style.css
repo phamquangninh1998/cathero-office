@@ -677,3 +677,15 @@ body[data-auth="in"] { display: flex; flex-direction: column; min-height: 100vh;
 .zone-app { box-shadow: none !important; border: 2px solid #fff; outline: 1px solid rgba(0,0,0,.08); }
 .team-btn { border: 1.5px solid color-mix(in srgb, var(--zc) 55%, #fff) !important; }
 .stars, .rocket-fly { display: none; }
+
+/* conversation on job cards */
+.j-ask { background: #fff3bf; border: 1.5px solid #ffd43b; border-radius: 12px; padding: 8px 10px; margin: 0 0 8px; font-size: 14px; }
+.j-ask p { margin: 0; }
+.convo { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.msg .who { display: block; font-size: 12px; font-weight: 800; color: #5c5468; margin: 0 0 2px; }
+.msg.me { align-self: flex-end; max-width: 92%; }
+.msg.me .j-report { background: #ffe8cc; }
+.msg.them { max-width: 96%; }
+.msg .j-report { margin: 0; }
+.reply-box { display: flex; gap: 6px; align-items: flex-end; margin: 6px 0 8px; }
+.reply-box textarea { flex: 1; font-size: 15px; border-radius: 12px; padding: 8px 10px; min-height: 42px; }
