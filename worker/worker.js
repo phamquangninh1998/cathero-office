@@ -313,6 +313,9 @@ async function watchTick() {
       else if (Date.now() - sentAt > 90000) { upd.status = "done"; upd.report = lastClaude.text.slice(0, 12000); upd.finishedAt = FieldValue.serverTimestamp(); upd.watchNext = FieldValue.delete(); }
     }
     if (upd.status && upd.status !== "done" && upd.status !== "needs_you") upd.ask = FieldValue.delete();
+    // Phuong may have pressed "Xong" while we were reading: never overwrite that.
+    const fresh = await d.ref.get();
+    if (fresh.get("doneByUser") || fresh.get("status") === "done" && j.status !== "done") return;
     await d.ref.update(upd);
     if (upd.status && upd.status !== j.status) {
       log("job", d.id, j.status, "->", upd.status);

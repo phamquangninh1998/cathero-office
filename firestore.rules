@@ -20,8 +20,10 @@ service cloud.firestore {
         && request.resource.data.status == 'queued'
         && request.resource.data.command is string
         && request.resource.data.command.size() < 8000;
-      allow update: if allowed()
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancelRequested']);
+      allow update: if allowed() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cancelRequested'])
+        || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'doneByUser', 'finishedAt'])
+            && request.resource.data.status == 'done' && request.resource.data.doneByUser == true));
     }
   }
 }

@@ -6,7 +6,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithCredential, sig
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, addDoc, updateDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114y";
+import { firebaseConfig, ALLOWED_EMAILS, GOOGLE_CLIENT_ID } from "./firebase-config.js?v=20261114z";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -45,6 +45,8 @@ async function startOffice(user) {
       ...job, status: "queued", createdAt: serverTimestamp(), createdBy: user.email
     }),
     cancelJob: (id) => updateDoc(doc(db, "jobs", id), { cancelRequested: true }),
+    // Phuong decides a task is finished.
+    markDone: (id) => updateDoc(doc(db, "jobs", id), { status: "done", doneByUser: true, finishedAt: serverTimestamp() }),
     watchJobs: (cb) => onSnapshot(
       query(collection(db, "jobs"), orderBy("createdAt", "desc"), limit(80)),
       { includeMetadataChanges: false },
@@ -72,7 +74,7 @@ if (DEMO) {
   const now = Date.now();
   window.OfficeApp.start({
     threads: { "idea-idea": "demo", "b1-developer": "demo", "b2-developer": "demo", "b3-developer": "demo", "b4-developer": "demo", "chung-marketing": "demo", "chung-data": "demo" },
-    history: {}, icons: Object.fromEntries(["b1", "b2", "b3", "b4", "sports", "moe", "paperroll"].map((k) => [k, `icons/${k}.png`])), saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
+    history: {}, markDone: async () => {}, icons: Object.fromEntries(["b1", "b2", "b3", "b4", "sports", "moe", "paperroll"].map((k) => [k, `icons/${k}.png`])), saveThread: async () => {}, saveHistory: async () => {}, createJob: async () => {}, cancelJob: async () => {},
     watchJobs: (cb) => cb([
       { id: "d1", seatId: "b2-developer", status: "running", command: "Kiểm tra lỗi màn 12", createdAt: T(now - 60000), startedAt: T(now - 50000), progress: [{ text: "Đọc: Assets/Scripts/Wave.cs" }] },
       { id: "c1", seatId: "boss", team: "ceo", status: "needs_you", command: "bản 4: solo bị reject ở trên app store connect kìa, xử lý đi", createdBy: "me@x.com", createdAt: T(now - 600000), startedAt: T(now - 598000), sentAt: T(now - 597000), delegatedTo: "Developer · Bản 4 Solo", delegatedSeat: "b4-developer", followUrl: "https://claude.ai/code/project/x?thread=y", ask: "Bạn đồng ý đổi Simulated Gambling thành None rồi gửi duyệt lại không?", conversation: [{ who: "claude", text: "Apple từ chối vì khai báo độ tuổi có mô phỏng cờ bạc." }, { who: "claude", text: "Bạn đồng ý đổi Simulated Gambling thành None rồi gửi duyệt lại không?" }] },

@@ -690,7 +690,7 @@ window.OfficeApp = { start: function (api) {
           <time>${esc(when)}</time>
         </summary>
         <div class="j-body">${body}
-          ${active ? `<button class="btn small ghost j-cancel" data-job="${j.id}">${["sent", "replying", "delegated"].includes(j.status) ? "Ngừng theo dõi" : "Huỷ"}</button>` : ""}
+          ${active || j.status === "needs_you" ? `<button class="btn small primary j-done" data-job="${j.id}">Xong</button>` : ""}
         </div>
       </details>
     </li>`;
@@ -866,6 +866,12 @@ window.OfficeApp = { start: function (api) {
     if (b) {
       const list = jobs.filter((j) => j.batchId === b.dataset.batch && ACTIVE.includes(j.status));
       Promise.all(list.map((j) => api.cancelJob(j.id))).then(() => toast("Đã yêu cầu huỷ cả lượt.")).catch((err) => toast("Không huỷ được: " + err.message));
+      return;
+    }
+    const dn = e.target.closest(".j-done");
+    if (dn) {
+      dn.disabled = true;
+      api.markDone(dn.dataset.job).then(() => toast("Đã đánh dấu Xong.")).catch((err) => { dn.disabled = false; toast("Không lưu được: " + (err.code || err.message)); });
       return;
     }
     const c = e.target.closest(".j-cancel");
