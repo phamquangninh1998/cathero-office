@@ -356,18 +356,19 @@ async function overviewTick() {
     // For desks that wait on Phuong, keep the employee's full latest message so
     // the web can show the real question. Re-read only when that thread changed.
     let reads = 0;
-    // Only "Cần bạn" desks need the full message (Phuong removed the "Đang làm gì" detail).
-    const want = Object.entries(out).filter(([, st]) => st.kind === "ask")
-      .sort((a, b) => (a[1].kind === "ask" ? 0 : 1) - (b[1].kind === "ask" ? 0 : 1));
+    // Every desk keeps its latest reply (Phuong reads the previous answer even while
+    // the employee is working). Questions first, then working desks, then the rest.
+    const rank = { ask: 0, run: 1 };
+    const want = Object.entries(out).sort((a, b) => (rank[a[1].kind] ?? 2) - (rank[b[1].kind] ?? 2));
     for (const [seat, st] of want) {
-      // Working desks refresh every ~2 min even if the summary line stays the same.
-      const sig = `${st.kind}|${st.summary}|${st.ago}` + (st.kind === "run" ? `|${Math.floor(Date.now() / 120000)}` : "");
+      // Re-read when the thread's summary changes; working desks also every ~3 min.
+      const sig = `${st.kind}|${st.summary}` + (st.kind === "run" ? `|${Math.floor(Date.now() / 180000)}` : "");
       const cached = detailCache.get(seat);
       if (cached && cached.sig === sig) { st.detail = cached.detail; continue; }
       if (reads >= 4) { if (cached) st.detail = cached.detail; continue; }
       reads++;
       const turl = `${PROJECT_URL}?thread=${threads[seat]}`;
-      const latest = st.kind === "run" ? await fast.recentActivity(turl).catch(() => null) : await fast.latestReply(turl).catch(() => null);
+      const latest = await fast.latestReply(turl).catch(() => null);
       if (latest) { detailCache.set(seat, { sig, detail: latest.text }); st.detail = latest.text; }
     }
     if (reads) await fast.backToOverview().catch(() => {});

@@ -267,7 +267,7 @@ window.OfficeApp = { start: function (api) {
     const ts = current && current.kind === "seat" ? threadStates[current.seat.id] : null;
     box.hidden = !ts;
     if (ts) box.innerHTML = `<b>Trên claude.ai:</b> <span class="ts-label ${ts.kind}">${esc(ts.label)}</span> ${esc(ts.summary || "")}${ts.ago ? ` <time>${esc(ts.ago)}</time>` : ""}`
-      + (ts.detail && ts.kind === "ask" ? `<span class="ts-sub">${ts.kind === "run" ? "Đang làm gì (tin mới nhất trong thread):" : ts.kind === "ask" ? "Nhân viên đang hỏi:" : "Tin mới nhất:"}</span><div class="ts-detail j-report">${md(ts.detail)}</div>${ts.kind === "ask" ? `<span class="ts-hint">Trả lời bằng ô Lệnh bên dưới, tin sẽ vào thẳng thread này.</span>` : ""}` : "");
+      + (ts.detail ? `<span class="ts-sub">${ts.kind === "ask" ? "Nhân viên đang hỏi:" : "Phản hồi gần nhất:"}</span><div class="ts-detail j-report">${md(ts.detail)}</div>${ts.kind === "ask" ? `<span class="ts-hint">Trả lời bằng ô Lệnh bên dưới, tin sẽ vào thẳng thread này.</span>` : ""}` : "");
   }
 
   // Shrink the office so it fits next to the open panel (desktop) or above the sheet (phone).
